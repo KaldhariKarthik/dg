@@ -1,68 +1,783 @@
 <!DOCTYPE html>
-<html>
+<html class="dark" lang="en">
 
 <head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>DaVinci — camera test</title>
-</head>
+    <meta charset="utf-8" />
+    <meta content="width=device-width, initial-scale=1.0, viewport-fit=cover" name="viewport" />
+    <title>DaVinci</title>
+    <link href="https://fonts.googleapis.com" rel="preconnect" />
+    <link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect" />
+    <link
+        href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700&amp;family=Space+Mono:wght@400;700&amp;display=swap"
+        rel="stylesheet" />
+    <link
+        href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap"
+        rel="stylesheet" />
+    <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+    <script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "surface-variant": "#3a3333",
+                        "primary-fixed-dim": "#c6c6c7",
+                        "on-secondary-fixed-variant": "#852400",
+                        "error-container": "#93000a",
+                        "on-error-container": "#ffdad6",
+                        "surface-dim": "#171212",
+                        "on-surface-variant": "#c4c7c8",
+                        "error": "#ffb4ab",
+                        "surface-bright": "#3e3837",
+                        "on-surface": "#ece0df",
+                        "on-primary": "#2f3131",
+                        "secondary-fixed-dim": "#ffb59e",
+                        "secondary-container": "#ff571a",
+                        "background": "#171212",
+                        "secondary-fixed": "#ffdbd0",
+                        "surface-tint": "#c6c6c7",
+                        "on-secondary-fixed": "#3a0b00",
+                        "primary-fixed": "#e2e2e2",
+                        "tertiary-fixed-dim": "#ccc5bf",
+                        "surface-container": "#241e1e",
+                        "primary-container": "#e2e2e2",
+                        "on-error": "#690005",
+                        "inverse-primary": "#5d5f5f",
+                        "outline": "#8e9192",
+                        "on-tertiary-fixed-variant": "#4a4641",
+                        "primary": "#ffffff",
+                        "surface-container-highest": "#3a3333",
+                        "inverse-surface": "#ece0df",
+                        "surface-container-low": "#201a1a",
+                        "on-primary-fixed": "#1a1c1c",
+                        "surface": "#171212",
+                        "on-secondary-container": "#521300",
+                        "on-secondary": "#5e1700",
+                        "on-primary-fixed-variant": "#454747",
+                        "surface-container-lowest": "#120d0d",
+                        "outline-variant": "#444748",
+                        "tertiary": "#ffffff",
+                        "tertiary-fixed": "#e9e1da",
+                        "on-tertiary": "#33302b",
+                        "on-primary-container": "#636565",
+                        "secondary": "#ffb59e",
+                        "on-tertiary-fixed": "#1e1b17",
+                        "tertiary-container": "#e9e1da",
+                        "on-tertiary-container": "#68645e",
+                        "on-background": "#ece0df",
+                        "inverse-on-surface": "#352f2f",
+                        "surface-container-high": "#2f2828"
+                    },
+                    borderRadius: { "DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px", "bento": "24px", "card": "24px" },
+                    spacing: { "container-max": "1440px", "unit": "4px", "gutter": "16px", "margin-desktop": "48px", "margin-mobile": "20px" },
+                    fontFamily: {
+                        "headline-md": ["Hanken Grotesk"], "display-lg": ["Hanken Grotesk"], "body-md": ["Hanken Grotesk"],
+                        "headline-lg": ["Hanken Grotesk"], "body-lg": ["Hanken Grotesk"], "status-dot": ["Space Mono"], "label-caps": ["Space Mono"]
+                    },
+                    fontSize: {
+                        "headline-md": ["24px", { "lineHeight": "1.3", "letterSpacing": "-0.01em", "fontWeight": "500" }],
+                        "display-lg": ["64px", { "lineHeight": "1.1", "letterSpacing": "-0.04em", "fontWeight": "600" }],
+                        "body-md": ["16px", { "lineHeight": "1.6", "letterSpacing": "0em", "fontWeight": "400" }],
+                        "headline-lg": ["32px", { "lineHeight": "1.2", "letterSpacing": "-0.02em", "fontWeight": "600" }],
+                        "body-lg": ["18px", { "lineHeight": "1.6", "letterSpacing": "0em", "fontWeight": "400" }],
+                        "status-dot": ["10px", { "lineHeight": "1.0", "letterSpacing": "0.05em", "fontWeight": "400" }],
+                        "label-caps": ["11px", { "lineHeight": "1.0", "letterSpacing": "0.1em", "fontWeight": "700" }]
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        body {
+            background-color: #171212;
+            color: #ece0df;
+            -webkit-font-smoothing: antialiased;
+            overflow-x: hidden;
+        }
 
-<body style="font-family:sans-serif;padding:1rem;text-align:center">
-    <h1>DaVinci — camera test</h1>
+        .inner-glow-1px-white-10 {
+            box-shadow: inset 0 1px 1px 0 rgba(255, 255, 255, 0.1);
+        }
 
-    <!-- The live feed. playsinline is REQUIRED for iOS or it goes fullscreen. -->
-    <video id="feed" autoplay playsinline muted
-        style="width:100%;max-width:480px;background:#000;border-radius:8px"></video>
+        .bento-border {
+            border: 0.5px solid rgba(255, 255, 255, 0.2);
+            border-bottom-color: rgba(255, 255, 255, 0.1);
+            border-right-color: rgba(255, 255, 255, 0.1);
+        }
 
-    <div style="margin-top:1rem">
-        <button id="startBtn" style="font-size:1.1rem;padding:0.6rem 1.2rem">
-            Summon camera
-        </button>
-    </div>
+        .glass-panel {
+            background: rgba(255, 255, 255, 0.04);
+            backdrop-filter: blur(24px);
+            -webkit-backdrop-filter: blur(24px);
+        }
 
-    <!-- Status / error messages show here so failures are visible, not silent -->
-    <p id="status" style="margin-top:1rem;color:#555"></p>
+        .glass-card {
+            background: rgba(255, 255, 255, 0.03);
+            backdrop-filter: blur(32px);
+            border-top: 0.5px solid rgba(255, 255, 255, 0.2);
+            border-left: 0.5px solid rgba(255, 255, 255, 0.2);
+            border-bottom: 0.5px solid rgba(255, 255, 255, 0.1);
+            border-right: 0.5px solid rgba(255, 255, 255, 0.1);
+            box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.1);
+        }
 
-    <script>
-        const video = document.getElementById('feed');
-        const startBtn = document.getElementById('startBtn');
-        const status = document.getElementById('status');
+        .scanline {
+            background: linear-gradient(to bottom, transparent 50%, rgba(255, 255, 255, 0.05) 50%);
+            background-size: 100% 4px;
+            pointer-events: none;
+        }
 
-        let stream = null;
+        .bg-warm-glow {
+            background: radial-gradient(circle at 50% 50%, rgba(255, 87, 26, 0.08) 0%, transparent 70%);
+        }
 
-        startBtn.addEventListener('click', async () => {
-            status.textContent = 'Requesting camera…';
+        .bento-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 16px;
+        }
 
-            // Secure-context guard — getUserMedia only exists on https or localhost
-            if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-                status.textContent =
-                    'Camera API unavailable. Needs https or localhost (not a raw IP).';
-                return;
+        .bento-span-2 {
+            grid-column: span 2;
+        }
+
+        .camera-corner {
+            width: 20px;
+            height: 20px;
+            border-color: rgba(255, 255, 255, 0.4);
+            position: absolute;
+        }
+
+        .orb-pulse {
+            animation: orbpulse 8s ease-in-out infinite;
+        }
+
+        @keyframes orbpulse {
+
+            0%,
+            100% {
+                transform: scale(1);
+                opacity: 0.4;
+                filter: blur(40px);
             }
 
-            try {
-                stream = await navigator.mediaDevices.getUserMedia({
-                    video: { facingMode: 'environment' },  // rear camera
-                    audio: false
+            50% {
+                transform: scale(1.1);
+                opacity: 0.6;
+                filter: blur(60px);
+            }
+        }
+
+        @keyframes pulse-dot {
+
+            0%,
+            100% {
+                opacity: 1;
+            }
+
+            50% {
+                opacity: 0.3;
+            }
+        }
+
+        .animate-pulse-dot {
+            animation: pulse-dot 2s infinite;
+        }
+
+        .hide-scrollbar::-webkit-scrollbar {
+            display: none;
+        }
+
+        .hide-scrollbar {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+
+        .temporal-line {
+            background: linear-gradient(180deg, rgba(255, 255, 255, 0.05) 0%, rgba(255, 255, 255, 0.4) 50%, rgba(255, 255, 255, 0.05) 100%);
+        }
+
+        /* Screen switching */
+        .screen {
+            display: none;
+        }
+
+        .screen.active {
+            display: block;
+        }
+
+        .navlink.active-nav {
+            color: #ff571a;
+        }
+    </style>
+</head>
+
+<body class="font-body-md text-body-md">
+
+    <!-- Atmospheric background, shared -->
+    <div class="fixed inset-0 pointer-events-none z-0">
+        <div class="absolute top-[-10%] right-[-10%] w-[60%] h-[60%] bg-warm-glow opacity-50 blur-[120px]"></div>
+        <div class="absolute bottom-[10%] left-[-10%] w-[50%] h-[50%] bg-surface-container opacity-30 blur-[100px]">
+        </div>
+    </div>
+
+    <!-- ============ SHARED TOP BAR ============ -->
+    <header
+        class="fixed top-0 w-full z-50 bg-surface/10 backdrop-blur-xl border-b border-white/10 flex justify-between items-center px-margin-mobile py-4 inner-glow-1px-white-10">
+        <div class="flex items-center gap-2">
+            <span class="material-symbols-outlined text-primary"
+                style="font-variation-settings:'FILL' 1;">terminal</span>
+            <span class="font-label-caps text-label-caps tracking-widest text-primary">DAVINCI</span>
+        </div>
+        <div class="flex items-center gap-3">
+            <div class="flex items-center gap-2 px-2 py-1 bg-white/5 rounded-full border border-white/10">
+                <div class="w-1.5 h-1.5 rounded-full bg-secondary-container animate-pulse"></div>
+                <span class="font-status-dot text-status-dot text-on-surface-variant uppercase">On-device</span>
+            </div>
+        </div>
+    </header>
+
+    <!-- ============================================================= -->
+    <!-- HOME SCREEN -->
+    <!-- ============================================================= -->
+    <section id="screen-home" class="screen active relative z-10 min-h-screen pt-24 pb-32 px-margin-mobile">
+        <section class="mb-2">
+            <p class="font-label-caps text-label-caps text-on-surface-variant mb-1 tracking-[0.2em]" id="home-clock">—
+            </p>
+            <h2 class="font-headline-lg text-headline-lg text-primary">Good morning.</h2>
+            <p class="font-body-md text-body-md text-on-surface-variant mt-2 max-w-[85%]">Here's your day. Everything
+                below is reasoned from your calendar and files — privately, on your device.</p>
+        </section>
+
+        <div class="bento-grid mt-6">
+            <!-- Today's briefing -->
+            <div class="glass-card bento-span-2 rounded-bento p-6 relative overflow-hidden">
+                <div class="flex justify-between items-start mb-6">
+                    <div class="flex items-center gap-3">
+                        <span class="material-symbols-outlined text-secondary">wb_twilight</span>
+                        <span class="font-label-caps text-label-caps text-on-surface-variant">Morning Briefing</span>
+                    </div>
+                    <div class="bg-secondary-container/20 border border-secondary/30 px-3 py-1 rounded-full">
+                        <span
+                            class="font-status-dot text-status-dot text-secondary uppercase tracking-widest">Today</span>
+                    </div>
+                </div>
+                <h3 class="font-headline-md text-headline-md text-primary mb-2">3 commitments, 1 deadline approaching
+                </h3>
+                <p class="font-body-md text-body-md text-on-surface-variant/80 mb-6">Your morning is clear for focused
+                    work. A deadline needs attention before end of day.</p>
+                <div class="space-y-3">
+                    <div class="flex items-center gap-4 py-2 border-b border-white/5"><span
+                            class="font-status-dot text-status-dot text-on-surface-variant">01</span><span
+                            class="text-on-surface">Review and reply to the open thread</span></div>
+                    <div class="flex items-center gap-4 py-2 border-b border-white/5"><span
+                            class="font-status-dot text-status-dot text-on-surface-variant">02</span><span
+                            class="text-on-surface">Prep notes for the afternoon call</span></div>
+                    <div class="flex items-center gap-4 py-2"><span
+                            class="font-status-dot text-status-dot text-on-surface-variant">03</span><span
+                            class="text-on-surface">Submit the deliverable before 6 PM</span></div>
+                </div>
+            </div>
+
+            <!-- Talk to DaVinci (primary action) -->
+            <button onclick="showScreen('conversation')"
+                class="glass-card rounded-bento p-5 flex flex-col justify-between aspect-square text-left active:scale-95 transition-transform">
+                <div class="w-10 h-10 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center">
+                    <span class="material-symbols-outlined text-primary text-xl"
+                        style="font-variation-settings:'FILL' 1;">graphic_eq</span>
+                </div>
+                <div>
+                    <span class="font-label-caps text-label-caps text-on-surface-variant block mb-1">Talk</span>
+                    <h4 class="font-headline-md text-headline-md text-primary">Ask</h4>
+                    <p class="font-status-dot text-status-dot text-on-surface-variant uppercase mt-1">Voice or text</p>
+                </div>
+            </button>
+
+            <!-- Summon vision -->
+            <button onclick="showScreen('vision')"
+                class="glass-card rounded-bento p-5 flex flex-col justify-between aspect-square text-left active:scale-95 transition-transform relative overflow-hidden">
+                <div
+                    class="relative z-10 w-10 h-10 rounded-xl bg-white/10 border border-white/20 flex items-center justify-center">
+                    <span class="material-symbols-outlined text-primary text-xl">filter_center_focus</span>
+                </div>
+                <div class="relative z-10">
+                    <span class="font-label-caps text-label-caps text-on-surface-variant block mb-1">Summon</span>
+                    <h4 class="font-headline-md text-headline-md text-primary">Vision</h4>
+                    <p class="font-status-dot text-status-dot text-on-surface-variant uppercase mt-1">Point camera</p>
+                </div>
+            </button>
+
+            <!-- Schedule preview -->
+            <div class="glass-card bento-span-2 rounded-bento p-6">
+                <div class="flex justify-between items-center mb-6">
+                    <div class="flex items-center gap-3">
+                        <span class="material-symbols-outlined text-on-surface-variant text-lg">schedule</span>
+                        <span class="font-label-caps text-label-caps text-on-surface-variant">Today's Shape</span>
+                    </div>
+                    <button onclick="showScreen('planner')"
+                        class="font-status-dot text-status-dot text-secondary uppercase">Open planner →</button>
+                </div>
+                <div class="relative h-24 flex items-end gap-[3px]">
+                    <div class="flex-1 bg-white/5 rounded-t-sm" style="height:45%"></div>
+                    <div class="flex-1 bg-white/5 rounded-t-sm" style="height:35%"></div>
+                    <div class="flex-1 bg-white/5 rounded-t-sm" style="height:55%"></div>
+                    <div class="flex-1 bg-white/5 rounded-t-sm" style="height:48%"></div>
+                    <div class="flex-1 bg-white/5 rounded-t-sm" style="height:72%"></div>
+                    <div class="flex-1 bg-secondary-container rounded-t-sm relative shadow-[0_0_15px_rgba(255,87,26,0.3)]"
+                        style="height:85%">
+                        <div class="absolute -top-8 left-1/2 -translate-x-1/2 flex flex-col items-center">
+                            <span class="font-status-dot text-status-dot text-secondary">NOW</span>
+                        </div>
+                    </div>
+                    <div class="flex-1 bg-white/5 rounded-t-sm" style="height:58%"></div>
+                    <div class="flex-1 bg-white/5 rounded-t-sm" style="height:42%"></div>
+                    <div class="flex-1 bg-white/5 rounded-t-sm" style="height:38%"></div>
+                    <div class="flex-1 bg-white/5 rounded-t-sm" style="height:25%"></div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ============================================================= -->
+    <!-- VISION SCREEN — real camera transplanted here -->
+    <!-- ============================================================= -->
+    <section id="screen-vision" class="screen relative h-screen w-full">
+        <main class="relative h-screen w-full flex items-center justify-center p-2 pt-20 pb-24 overflow-hidden">
+            <div
+                class="relative w-full h-full rounded-[32px] overflow-hidden border border-white/10 shadow-2xl bg-black">
+                <!-- REAL CAMERA FEED -->
+                <video id="feed" autoplay playsinline muted class="absolute inset-0 w-full h-full object-cover"></video>
+
+                <!-- Technical overlay (decorative, kept) -->
+                <div class="absolute inset-0 scanline opacity-30 pointer-events-none"></div>
+                <div class="absolute inset-0 border-[20px] border-transparent pointer-events-none">
+                    <div class="camera-corner top-0 left-0 border-t-2 border-l-2"></div>
+                    <div class="camera-corner top-0 right-0 border-t-2 border-r-2"></div>
+                    <div class="camera-corner bottom-0 left-0 border-b-2 border-l-2"></div>
+                    <div class="camera-corner bottom-0 right-0 border-b-2 border-r-2"></div>
+                </div>
+
+                <!-- Live status pill -->
+                <div class="absolute top-6 left-6 flex gap-2">
+                    <div class="glass-panel bento-border px-3 py-1 rounded-full flex items-center gap-2">
+                        <div id="vision-dot" class="w-2 h-2 rounded-full bg-white/30"></div>
+                        <span id="vision-state" class="font-label-caps text-[9px] text-primary">IDLE</span>
+                    </div>
+                </div>
+
+                <!-- Guidance caption strip (this is where orchestrator speech will render) -->
+                <div class="absolute bottom-28 left-6 right-6">
+                    <div id="guidance"
+                        class="glass-panel bento-border p-4 rounded-2xl text-on-surface font-body-md text-[15px] leading-snug opacity-0 transition-opacity duration-300">
+                    </div>
+                </div>
+
+                <!-- Controls -->
+                <div class="absolute bottom-6 left-6 right-6 flex items-center justify-center gap-6">
+                    <button id="startBtn"
+                        class="px-6 h-14 rounded-full bg-primary text-background font-label-caps text-label-caps tracking-widest flex items-center gap-2 shadow-[0_0_30px_rgba(255,255,255,0.25)] active:scale-95 transition-all">
+                        <span class="material-symbols-outlined"
+                            style="font-variation-settings:'FILL' 1;">visibility</span>
+                        SUMMON
+                    </button>
+                    <button id="stopBtn"
+                        class="hidden w-14 h-14 rounded-full glass-panel bento-border flex items-center justify-center text-on-surface active:scale-90 transition-transform">
+                        <span class="material-symbols-outlined">stop</span>
+                    </button>
+                </div>
+
+                <!-- Status / error line -->
+                <div class="absolute top-6 right-6">
+                    <span id="status" class="font-status-dot text-[10px] text-on-surface-variant"></span>
+                </div>
+            </div>
+        </main>
+    </section>
+
+    <!-- ============================================================= -->
+    <!-- CONVERSATION SCREEN -->
+    <!-- ============================================================= -->
+    <section id="screen-conversation" class="screen relative z-10 min-h-screen flex flex-col">
+        <main class="flex-1 overflow-y-auto pt-24 pb-40 px-margin-mobile hide-scrollbar relative">
+            <div class="fixed inset-0 pointer-events-none z-0">
+                <div
+                    class="absolute top-1/4 left-1/2 -translate-x-1/2 w-64 h-64 bg-secondary-container/20 rounded-full blur-[100px] orb-pulse">
+                </div>
+            </div>
+
+            <div class="relative z-10 space-y-8 flex flex-col" id="transcript">
+                <div class="flex flex-col gap-2 max-w-[85%]">
+                    <span class="font-label-caps text-[9px] text-secondary tracking-widest">DAVINCI</span>
+                    <div class="p-5 rounded-xl bg-white/5 backdrop-blur-md bento-border inner-glow-1px-white-10">
+                        <p class="font-body-md text-on-surface leading-relaxed">Good morning. You've got a deadline due
+                            before 6 PM today and a free morning block. Want me to lay out the work so it lands on time?
+                        </p>
+                    </div>
+                </div>
+                <div class="flex flex-col gap-2 max-w-[85%] self-end items-end">
+                    <span class="font-label-caps text-[9px] text-on-surface-variant tracking-widest">YOU</span>
+                    <div class="p-5 rounded-xl bg-primary-container text-on-primary-container shadow-lg">
+                        <p class="font-body-md leading-relaxed">Yes, and keep the afternoon call in mind.</p>
+                    </div>
+                </div>
+            </div>
+        </main>
+
+        <!-- Voice control bar -->
+        <div class="fixed bottom-0 left-0 w-full z-50 pointer-events-none">
+            <div class="w-full flex justify-center items-end px-margin-mobile pb-28 h-20">
+                <div class="flex items-end gap-[2px] h-full" id="waveform"></div>
+            </div>
+            <div
+                class="p-6 pb-10 flex justify-center items-center pointer-events-auto bg-gradient-to-t from-background via-background/90 to-transparent">
+                <div class="flex items-center gap-6">
+                    <button
+                        class="w-12 h-12 rounded-full bento-border bg-white/5 flex items-center justify-center text-on-surface-variant active:scale-90 transition-transform"><span
+                            class="material-symbols-outlined">keyboard</span></button>
+                    <button id="mic-btn"
+                        class="w-20 h-20 rounded-full bg-primary text-background flex items-center justify-center shadow-[0_0_30px_rgba(255,255,255,0.3)] active:scale-95 transition-all group">
+                        <span class="material-symbols-outlined text-4xl"
+                            style="font-variation-settings:'FILL' 1;">mic</span>
+                    </button>
+                    <button onclick="showScreen('home')"
+                        class="w-12 h-12 rounded-full bento-border bg-white/5 flex items-center justify-center text-on-surface-variant active:scale-90 transition-transform"><span
+                            class="material-symbols-outlined">close</span></button>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ============================================================= -->
+    <!-- PLANNER SCREEN -->
+    <!-- ============================================================= -->
+    <section id="screen-planner"
+        class="screen relative z-10 min-h-screen pt-24 pb-32 px-margin-mobile max-w-md mx-auto">
+        <section class="mb-8">
+            <h1 class="font-headline-lg text-headline-lg text-primary mb-1">Today's Plan</h1>
+            <p class="font-body-md text-on-surface-variant" id="planner-date">—</p>
+        </section>
+
+        <section class="relative">
+            <div class="absolute left-1 top-0 bottom-0 w-px temporal-line opacity-30"></div>
+            <div class="space-y-6 ml-6">
+                <div class="glass-card bento-border rounded-card p-4">
+                    <div class="flex justify-between items-start mb-3">
+                        <span class="font-label-caps text-label-caps text-on-surface-variant">09:00 — 11:00</span>
+                        <span
+                            class="font-status-dot text-status-dot bg-white/5 px-2 py-1 rounded bento-border">FOCUS</span>
+                    </div>
+                    <h3 class="font-headline-md text-headline-md text-primary mb-2">Deep work block</h3>
+                    <p class="font-body-md text-on-surface-variant text-sm">Protected time for the deliverable due
+                        today.</p>
+                </div>
+
+                <div class="glass-card bento-border rounded-card p-4 border-l-2 border-l-secondary-container">
+                    <div class="flex justify-between items-start mb-3">
+                        <span class="font-label-caps text-label-caps text-secondary-fixed">14:00 — 15:00</span>
+                        <span
+                            class="font-status-dot text-status-dot bg-secondary-container/20 text-secondary-fixed px-2 py-1 rounded bento-border">CALL</span>
+                    </div>
+                    <h3 class="font-headline-md text-headline-md text-primary mb-2">Afternoon call</h3>
+                    <p class="font-body-md text-on-surface-variant text-sm">Bring the prepped notes from this morning.
+                    </p>
+                </div>
+
+                <!-- Conflict / at-risk card -->
+                <div
+                    class="bg-error-container/20 backdrop-blur-xl border border-error/30 rounded-card p-5 shadow-[0_0_30px_rgba(147,0,10,0.15)]">
+                    <div class="flex items-center gap-2 mb-3 text-error">
+                        <span class="material-symbols-outlined text-lg">warning</span>
+                        <span class="font-label-caps text-label-caps">DEADLINE AT RISK</span>
+                    </div>
+                    <h3 class="font-headline-md text-headline-md text-on-error-container mb-2">Deliverable due 6 PM</h3>
+                    <p class="font-body-md text-on-error-container/80 text-sm mb-4">The afternoon call leaves a tight
+                        window afterward. Moving 30 minutes of prep into the morning block keeps it comfortable.</p>
+                    <button
+                        class="w-full bg-primary text-on-primary py-3 rounded-xl font-label-caps text-label-caps flex items-center justify-center gap-2">
+                        REPLAN FOR ME <span class="material-symbols-outlined text-sm">auto_fix</span>
+                    </button>
+                </div>
+
+                <div class="glass-card bento-border rounded-card p-4 opacity-50">
+                    <div class="flex justify-between items-start mb-3"><span
+                            class="font-label-caps text-label-caps text-on-surface-variant">17:00 — 18:00</span></div>
+                    <h3 class="font-headline-md text-headline-md text-primary mb-2">Wrap & submit</h3>
+                    <p class="font-body-md text-on-surface-variant text-sm">Final review before the deadline.</p>
+                </div>
+            </div>
+        </section>
+    </section>
+
+    <!-- ============================================================= -->
+    <!-- MEMORY SCREEN -->
+    <!-- ============================================================= -->
+    <section id="screen-memory" class="screen relative z-10 min-h-screen pt-24 pb-32 px-margin-mobile">
+        <section class="mb-6">
+            <h1 class="font-headline-lg text-headline-lg text-primary mb-1">What DaVinci Knows</h1>
+            <p class="font-body-md text-on-surface-variant">Your goals, habits, and the sources it can draw on — held on
+                your device.</p>
+        </section>
+
+        <!-- Connected sources -->
+        <section class="glass-card bento-border rounded-bento p-6 space-y-4 mb-6">
+            <div class="flex justify-between items-end">
+                <h2 class="font-label-caps text-label-caps text-primary/50 tracking-widest uppercase">Connected Sources
+                </h2>
+                <span class="material-symbols-outlined text-primary text-sm opacity-50">hub</span>
+            </div>
+            <div class="grid grid-cols-1 gap-2">
+                <div class="flex items-center justify-between p-3 rounded-xl bg-white/5 border border-white/5">
+                    <div class="flex items-center gap-3">
+                        <div
+                            class="w-10 h-10 rounded-lg flex items-center justify-center bg-primary/5 border border-primary/10">
+                            <span class="material-symbols-outlined text-primary">calendar_today</span></div>
+                        <div>
+                            <p class="font-label-caps text-label-caps text-primary">Calendar</p>
+                            <p class="font-status-dot text-status-dot text-on-surface-variant opacity-60">Reads your
+                                real commitments</p>
+                        </div>
+                    </div>
+                    <span
+                        class="w-1.5 h-1.5 rounded-full bg-secondary-container shadow-[0_0_8px_rgba(255,87,26,0.6)]"></span>
+                </div>
+                <div class="flex items-center justify-between p-3 rounded-xl bg-white/5 border border-white/5">
+                    <div class="flex items-center gap-3">
+                        <div
+                            class="w-10 h-10 rounded-lg flex items-center justify-center bg-primary/5 border border-primary/10">
+                            <span class="material-symbols-outlined text-primary">folder_open</span></div>
+                        <div>
+                            <p class="font-label-caps text-label-caps text-primary">Files</p>
+                            <p class="font-status-dot text-status-dot text-on-surface-variant opacity-60">Reasons over
+                                your documents</p>
+                        </div>
+                    </div>
+                    <span
+                        class="w-1.5 h-1.5 rounded-full bg-secondary-container shadow-[0_0_8px_rgba(255,87,26,0.6)]"></span>
+                </div>
+                <div class="flex items-center justify-between p-3 rounded-xl bg-white/5 border border-white/5">
+                    <div class="flex items-center gap-3">
+                        <div
+                            class="w-10 h-10 rounded-lg flex items-center justify-center bg-primary/5 border border-primary/10">
+                            <span class="material-symbols-outlined text-primary">visibility</span></div>
+                        <div>
+                            <p class="font-label-caps text-label-caps text-primary">Vision memory</p>
+                            <p class="font-status-dot text-status-dot text-on-surface-variant opacity-60">Only what you
+                                point the camera at</p>
+                        </div>
+                    </div>
+                    <span
+                        class="w-1.5 h-1.5 rounded-full bg-secondary-container shadow-[0_0_8px_rgba(255,87,26,0.6)]"></span>
+                </div>
+            </div>
+        </section>
+
+        <!-- Privacy statement — HONEST -->
+        <section
+            class="glass-card bento-border rounded-bento p-6 bg-secondary-container/5 border-secondary-container/20 space-y-4">
+            <div class="flex items-start gap-4">
+                <div class="text-secondary-container"><span class="material-symbols-outlined"
+                        style="font-variation-settings:'FILL' 1;">security</span></div>
+                <div>
+                    <h2 class="font-label-caps text-label-caps text-primary mb-2">Privacy by Architecture</h2>
+                    <p class="font-body-md text-body-md text-on-surface-variant text-sm leading-relaxed opacity-80">
+                        All reasoning about you happens on the device. Your files, calendar, and memory never leave it.
+                        Only simple, non-personal errands ever touch the internet — and only after you approve them.
+                    </p>
+                </div>
+            </div>
+        </section>
+    </section>
+
+    <!-- ============ SHARED BOTTOM NAV ============ -->
+    <nav
+        class="fixed bottom-0 left-0 w-full z-50 bg-surface-container-lowest/40 backdrop-blur-2xl border-t border-white/10 flex justify-around items-center px-4 pb-8 pt-3 shadow-2xl">
+        <button data-screen="home"
+            class="navlink flex flex-col items-center justify-center text-on-surface-variant/60 p-2 transition-colors active:scale-95 duration-150">
+            <span class="material-symbols-outlined mb-1">home_max</span><span
+                class="font-label-caps text-label-caps">Home</span>
+        </button>
+        <button data-screen="vision"
+            class="navlink flex flex-col items-center justify-center text-on-surface-variant/60 p-2 transition-colors active:scale-95 duration-150">
+            <span class="material-symbols-outlined mb-1">filter_center_focus</span><span
+                class="font-label-caps text-label-caps">Vision</span>
+        </button>
+        <button data-screen="conversation"
+            class="navlink flex flex-col items-center justify-center text-on-surface-variant/60 p-2 transition-colors active:scale-95 duration-150">
+            <span class="material-symbols-outlined mb-1">graphic_eq</span><span
+                class="font-label-caps text-label-caps">Talk</span>
+        </button>
+        <button data-screen="planner"
+            class="navlink flex flex-col items-center justify-center text-on-surface-variant/60 p-2 transition-colors active:scale-95 duration-150">
+            <span class="material-symbols-outlined mb-1">event_note</span><span
+                class="font-label-caps text-label-caps">Planner</span>
+        </button>
+        <button data-screen="memory"
+            class="navlink flex flex-col items-center justify-center text-on-surface-variant/60 p-2 transition-colors active:scale-95 duration-150">
+            <span class="material-symbols-outlined mb-1">memory</span><span
+                class="font-label-caps text-label-caps">Memory</span>
+        </button>
+    </nav>
+
+    <script>
+        // ---------- Screen switching ----------
+        function showScreen(name) {
+            document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+            const el = document.getElementById('screen-' + name);
+            if (el) el.classList.add('active');
+            document.querySelectorAll('.navlink').forEach(n => {
+                n.classList.toggle('active-nav', n.dataset.screen === name);
+            });
+            // Stop the camera when leaving the vision screen
+            if (name !== 'vision') stopCamera();
+            window.scrollTo(0, 0);
+        }
+        document.querySelectorAll('.navlink').forEach(n => {
+            n.addEventListener('click', () => showScreen(n.dataset.screen));
+        });
+
+        // ---------- Clock / date ----------
+        function tickClock() {
+            const now = new Date();
+            const t = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            const d = now.toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric' });
+            const clock = document.getElementById('home-clock');
+            const pdate = document.getElementById('planner-date');
+            if (clock) clock.textContent = t;
+            if (pdate) pdate.textContent = d;
+        }
+        tickClock(); setInterval(tickClock, 30000);
+
+        // ---------- Conversation waveform (decorative) ----------
+        const waveform = document.getElementById('waveform');
+        if (waveform) {
+            for (let i = 0; i < 40; i++) {
+                const bar = document.createElement('div');
+                bar.className = 'w-[2px] rounded-full transition-all duration-300';
+                bar.style.height = '4px';
+                bar.style.backgroundColor = 'rgba(255,255,255,0.1)';
+                waveform.appendChild(bar);
+            }
+            const micBtn = document.getElementById('mic-btn');
+            let listening = false;
+            if (micBtn) micBtn.addEventListener('click', () => { listening = !listening; });
+            (function animateWave() {
+                waveform.querySelectorAll('div').forEach(bar => {
+                    const h = listening ? Math.random() * 36 + 4 : Math.random() * 6 + 2;
+                    bar.style.height = h + 'px';
+                    bar.style.backgroundColor = listening ? '#ff571a' : 'rgba(255,255,255,0.1)';
                 });
+                setTimeout(() => requestAnimationFrame(animateWave), 110);
+            })();
+        }
+
+        // ---------- VISION: real camera + loop (stubbed backend) ----------
+        const video = document.getElementById('feed');
+        const startBtn = document.getElementById('startBtn');
+        const stopBtn = document.getElementById('stopBtn');
+        const status = document.getElementById('status');
+        const guidance = document.getElementById('guidance');
+        const vState = document.getElementById('vision-state');
+        const vDot = document.getElementById('vision-dot');
+
+        let stream = null;
+        let looping = false;
+        let lastSpoken = '';
+
+        function setVisionState(label, live) {
+            if (vState) vState.textContent = label;
+            if (vDot) vDot.className = 'w-2 h-2 rounded-full ' + (live ? 'bg-error animate-pulse' : 'bg-white/30');
+        }
+
+        startBtn.addEventListener('click', async () => {
+            if (status) status.textContent = 'Requesting camera…';
+            if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+                status.textContent = 'Camera needs https or localhost.';
+                return;
+            }
+            try {
+                stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' }, audio: false });
                 video.srcObject = stream;
                 await video.play();
-                status.textContent =
-                    'Camera live. ' + (stream.getVideoTracks()[0]?.label || '');
-                startBtn.textContent = 'Restart camera';
+                status.textContent = '';
+                setVisionState('WATCHING', true);
+                startBtn.classList.add('hidden');
+                stopBtn.classList.remove('hidden');
+                looping = true;
+                runLoop();
             } catch (err) {
-                // Make the failure reason explicit — this is what saves you on a phone
                 let msg = 'Camera error: ' + err.name;
-                if (err.name === 'NotAllowedError')
-                    msg = 'Permission denied. Allow camera access and tap again.';
-                else if (err.name === 'NotFoundError')
-                    msg = 'No camera found on this device.';
-                else if (err.name === 'NotReadableError')
-                    msg = 'Camera is in use by another app. Close it and retry.';
+                if (err.name === 'NotAllowedError') msg = 'Permission denied — allow camera and tap Summon again.';
+                else if (err.name === 'NotFoundError') msg = 'No camera found on this device.';
+                else if (err.name === 'NotReadableError') msg = 'Camera busy in another app.';
                 status.textContent = msg;
                 console.error(err);
             }
         });
+
+        stopBtn.addEventListener('click', stopCamera);
+
+        function stopCamera() {
+            looping = false;
+            if (stream) { stream.getTracks().forEach(t => t.stop()); stream = null; }
+            if (video) video.srcObject = null;
+            setVisionState('IDLE', false);
+            if (startBtn) startBtn.classList.remove('hidden');
+            if (stopBtn) stopBtn.classList.add('hidden');
+            if (guidance) guidance.style.opacity = '0';
+        }
+
+        function grabFrame(maxEdge = 640, quality = 0.7) {
+            const scale = maxEdge / Math.max(video.videoWidth, video.videoHeight);
+            const w = video.videoWidth * scale, h = video.videoHeight * scale;
+            const canvas = document.createElement('canvas');
+            canvas.width = w; canvas.height = h;
+            canvas.getContext('2d').drawImage(video, 0, 0, w, h);
+            return canvas.toDataURL('image/jpeg', quality);
+        }
+
+        function showGuidance(text) {
+            if (!text || !guidance) return;
+            if (text === lastSpoken) return;          // speak-on-change gate
+            lastSpoken = text;
+            guidance.textContent = text;
+            guidance.style.opacity = '1';
+            // Voice out
+            try {
+                const u = new SpeechSynthesisUtterance(text);
+                speechSynthesis.cancel();
+                speechSynthesis.speak(u);
+            } catch (e) { }
+        }
+
+        // Self-paced loop. Right now /analyze is a STUB — swap for the real
+        // vision call + your friend's orchestrator later.
+        async function runLoop() {
+            while (looping) {
+                const frame = grabFrame();
+                try {
+                    const guide = await fakeAnalyze(frame);   // <-- replace with fetch('/analyze', …)
+                    showGuidance(guide);
+                } catch (e) { console.error(e); }
+                await new Promise(r => setTimeout(r, 1800));
+            }
+        }
+
+        // STUB backend: cycles through canned coaching lines so the loop is visible.
+        const cannedLines = [
+            'Camera is live — point it at what you\u2019re working on.',
+            'I can see the scene. Hold steady while I take a look.',
+            'Looks good. Tell me what you\u2019d like help with.'
+        ];
+        let cannedIdx = 0;
+        async function fakeAnalyze() {
+            await new Promise(r => setTimeout(r, 400));
+            const line = cannedLines[Math.min(cannedIdx, cannedLines.length - 1)];
+            cannedIdx++;
+            return line;
+        }
+
+        // Start on home
+        showScreen('home');
     </script>
 </body>
 

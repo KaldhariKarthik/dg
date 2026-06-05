@@ -1,9 +1,69 @@
 <!DOCTYPE html>
 <html>
 
-<body style="font-family:sans-serif;padding:2rem">
-    <h1>Pranav is a bitch</h1>
-    <p>If you can read this at an https URL, the pipe works.</p>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>DaVinci — camera test</title>
+</head>
+
+<body style="font-family:sans-serif;padding:1rem;text-align:center">
+    <h1>DaVinci — camera test</h1>
+
+    <!-- The live feed. playsinline is REQUIRED for iOS or it goes fullscreen. -->
+    <video id="feed" autoplay playsinline muted
+        style="width:100%;max-width:480px;background:#000;border-radius:8px"></video>
+
+    <div style="margin-top:1rem">
+        <button id="startBtn" style="font-size:1.1rem;padding:0.6rem 1.2rem">
+            Summon camera
+        </button>
+    </div>
+
+    <!-- Status / error messages show here so failures are visible, not silent -->
+    <p id="status" style="margin-top:1rem;color:#555"></p>
+
+    <script>
+        const video = document.getElementById('feed');
+        const startBtn = document.getElementById('startBtn');
+        const status = document.getElementById('status');
+
+        let stream = null;
+
+        startBtn.addEventListener('click', async () => {
+            status.textContent = 'Requesting camera…';
+
+            // Secure-context guard — getUserMedia only exists on https or localhost
+            if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+                status.textContent =
+                    'Camera API unavailable. Needs https or localhost (not a raw IP).';
+                return;
+            }
+
+            try {
+                stream = await navigator.mediaDevices.getUserMedia({
+                    video: { facingMode: 'environment' },  // rear camera
+                    audio: false
+                });
+                video.srcObject = stream;
+                await video.play();
+                status.textContent =
+                    'Camera live. ' + (stream.getVideoTracks()[0]?.label || '');
+                startBtn.textContent = 'Restart camera';
+            } catch (err) {
+                // Make the failure reason explicit — this is what saves you on a phone
+                let msg = 'Camera error: ' + err.name;
+                if (err.name === 'NotAllowedError')
+                    msg = 'Permission denied. Allow camera access and tap again.';
+                else if (err.name === 'NotFoundError')
+                    msg = 'No camera found on this device.';
+                else if (err.name === 'NotReadableError')
+                    msg = 'Camera is in use by another app. Close it and retry.';
+                status.textContent = msg;
+                console.error(err);
+            }
+        });
+    </script>
 </body>
 
 </html>

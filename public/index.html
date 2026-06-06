@@ -209,6 +209,72 @@
         .navlink.active-nav {
             color: #ff571a;
         }
+
+        /* Typing indicator */
+        .typing-indicator {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            padding: 12px 18px;
+        }
+        .typing-indicator span {
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            background: rgba(255, 255, 255, 0.4);
+            animation: typingBounce 1.4s ease-in-out infinite;
+        }
+        .typing-indicator span:nth-child(2) { animation-delay: 0.2s; }
+        .typing-indicator span:nth-child(3) { animation-delay: 0.4s; }
+        @keyframes typingBounce {
+            0%, 60%, 100% { transform: translateY(0); opacity: 0.4; }
+            30% { transform: translateY(-6px); opacity: 1; }
+        }
+
+        /* Chat input */
+        .chat-input-area {
+            background: rgba(255, 255, 255, 0.04);
+            backdrop-filter: blur(24px);
+            -webkit-backdrop-filter: blur(24px);
+        }
+        .chat-textarea {
+            background: transparent;
+            border: none;
+            outline: none;
+            resize: none;
+            color: #ece0df;
+            font-family: 'Hanken Grotesk', sans-serif;
+            font-size: 16px;
+            line-height: 1.5;
+            width: 100%;
+            max-height: 80px;
+            overflow-y: auto;
+        }
+        .chat-textarea::placeholder {
+            color: rgba(196, 199, 200, 0.5);
+        }
+        .chat-textarea::-webkit-scrollbar { width: 0; }
+
+        /* Vision question input */
+        .vision-input {
+            background: transparent;
+            border: none;
+            outline: none;
+            color: #ece0df;
+            font-family: 'Hanken Grotesk', sans-serif;
+            font-size: 14px;
+            width: 100%;
+        }
+        .vision-input::placeholder {
+            color: rgba(196, 199, 200, 0.4);
+        }
+
+        /* Markdown-ish reply styling */
+        .ai-reply p { margin-bottom: 0.5em; }
+        .ai-reply p:last-child { margin-bottom: 0; }
+        .ai-reply strong { color: #ffffff; }
+        .ai-reply ul, .ai-reply ol { padding-left: 1.2em; margin-bottom: 0.5em; }
+        .ai-reply code { background: rgba(255,255,255,0.08); padding: 2px 6px; border-radius: 4px; font-size: 0.9em; }
     </style>
 </head>
 
@@ -366,9 +432,22 @@
                 </div>
 
                 <!-- Guidance caption strip (this is where orchestrator speech will render) -->
-                <div class="absolute bottom-28 left-6 right-6">
+                <div class="absolute bottom-44 left-6 right-6">
                     <div id="guidance"
                         class="glass-panel bento-border p-4 rounded-2xl text-on-surface font-body-md text-[15px] leading-snug opacity-0 transition-opacity duration-300">
+                    </div>
+                </div>
+
+                <!-- Vision question input -->
+                <div class="absolute bottom-24 left-6 right-6">
+                    <div class="glass-panel bento-border rounded-2xl px-4 py-3 flex items-center gap-3">
+                        <span class="material-symbols-outlined text-on-surface-variant text-lg">question_answer</span>
+                        <input id="vision-question" type="text" class="vision-input"
+                            placeholder="Ask about what you see…" />
+                        <button id="vision-ask-btn"
+                            class="w-8 h-8 rounded-full bg-secondary-container flex items-center justify-center flex-shrink-0 active:scale-90 transition-transform">
+                            <span class="material-symbols-outlined text-background text-sm">send</span>
+                        </button>
                     </div>
                 </div>
 
@@ -423,25 +502,25 @@
             </div>
         </main>
 
-        <!-- Voice control bar -->
-        <div class="fixed bottom-0 left-0 w-full z-50 pointer-events-none">
-            <div class="w-full flex justify-center items-end px-margin-mobile pb-28 h-20">
+        <!-- Chat input bar -->
+        <div class="fixed bottom-20 left-0 w-full z-50">
+            <!-- Waveform (voice mode) -->
+            <div class="w-full flex justify-center items-end px-margin-mobile pb-4 h-16 pointer-events-none" id="waveform-wrap" style="display:none;">
                 <div class="flex items-end gap-[2px] h-full" id="waveform"></div>
             </div>
-            <div
-                class="p-6 pb-10 flex justify-center items-center pointer-events-auto bg-gradient-to-t from-background via-background/90 to-transparent">
-                <div class="flex items-center gap-6">
-                    <button
-                        class="w-12 h-12 rounded-full bento-border bg-white/5 flex items-center justify-center text-on-surface-variant active:scale-90 transition-transform"><span
-                            class="material-symbols-outlined">keyboard</span></button>
+            <!-- Text input (default mode) -->
+            <div id="chat-input-wrap" class="px-4 pb-4">
+                <div class="chat-input-area bento-border rounded-2xl px-4 py-3 flex items-end gap-3 inner-glow-1px-white-10">
                     <button id="mic-btn"
-                        class="w-20 h-20 rounded-full bg-primary text-background flex items-center justify-center shadow-[0_0_30px_rgba(255,255,255,0.3)] active:scale-95 transition-all group">
-                        <span class="material-symbols-outlined text-4xl"
-                            style="font-variation-settings:'FILL' 1;">mic</span>
+                        class="w-10 h-10 rounded-full bg-white/5 border border-white/10 flex items-center justify-center text-on-surface-variant flex-shrink-0 active:scale-90 transition-transform hover:bg-white/10">
+                        <span class="material-symbols-outlined" style="font-variation-settings:'FILL' 1;">mic</span>
                     </button>
-                    <button onclick="showScreen('home')"
-                        class="w-12 h-12 rounded-full bento-border bg-white/5 flex items-center justify-center text-on-surface-variant active:scale-90 transition-transform"><span
-                            class="material-symbols-outlined">close</span></button>
+                    <textarea id="chat-textarea" class="chat-textarea" rows="1"
+                        placeholder="Message DaVinci…"></textarea>
+                    <button id="send-btn"
+                        class="w-10 h-10 rounded-full bg-secondary-container flex items-center justify-center flex-shrink-0 active:scale-90 transition-transform shadow-[0_0_15px_rgba(255,87,26,0.3)] hover:shadow-[0_0_25px_rgba(255,87,26,0.5)]">
+                        <span class="material-symbols-outlined text-background text-lg">arrow_upward</span>
+                    </button>
                 </div>
             </div>
         </div>
@@ -530,7 +609,8 @@
                     <div class="flex items-center gap-3">
                         <div
                             class="w-10 h-10 rounded-lg flex items-center justify-center bg-primary/5 border border-primary/10">
-                            <span class="material-symbols-outlined text-primary">calendar_today</span></div>
+                            <span class="material-symbols-outlined text-primary">calendar_today</span>
+                        </div>
                         <div>
                             <p class="font-label-caps text-label-caps text-primary">Calendar</p>
                             <p class="font-status-dot text-status-dot text-on-surface-variant opacity-60">Reads your
@@ -544,7 +624,8 @@
                     <div class="flex items-center gap-3">
                         <div
                             class="w-10 h-10 rounded-lg flex items-center justify-center bg-primary/5 border border-primary/10">
-                            <span class="material-symbols-outlined text-primary">folder_open</span></div>
+                            <span class="material-symbols-outlined text-primary">folder_open</span>
+                        </div>
                         <div>
                             <p class="font-label-caps text-label-caps text-primary">Files</p>
                             <p class="font-status-dot text-status-dot text-on-surface-variant opacity-60">Reasons over
@@ -558,7 +639,8 @@
                     <div class="flex items-center gap-3">
                         <div
                             class="w-10 h-10 rounded-lg flex items-center justify-center bg-primary/5 border border-primary/10">
-                            <span class="material-symbols-outlined text-primary">visibility</span></div>
+                            <span class="material-symbols-outlined text-primary">visibility</span>
+                        </div>
                         <div>
                             <p class="font-label-caps text-label-caps text-primary">Vision memory</p>
                             <p class="font-status-dot text-status-dot text-on-surface-variant opacity-60">Only what you
@@ -619,7 +701,7 @@
     </nav>
 
     <script>
-        // ---------- Screen switching ----------
+        // ========== Screen switching ==========
         function showScreen(name) {
             document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
             const el = document.getElementById('screen-' + name);
@@ -627,15 +709,17 @@
             document.querySelectorAll('.navlink').forEach(n => {
                 n.classList.toggle('active-nav', n.dataset.screen === name);
             });
-            // Stop the camera when leaving the vision screen
             if (name !== 'vision') stopCamera();
+            // Show/hide chat input bar only on conversation screen
+            const chatWrap = document.getElementById('chat-input-wrap');
+            if (chatWrap) chatWrap.style.display = name === 'conversation' ? '' : 'none';
             window.scrollTo(0, 0);
         }
         document.querySelectorAll('.navlink').forEach(n => {
             n.addEventListener('click', () => showScreen(n.dataset.screen));
         });
 
-        // ---------- Clock / date ----------
+        // ========== Clock / date ==========
         function tickClock() {
             const now = new Date();
             const t = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
@@ -647,7 +731,120 @@
         }
         tickClock(); setInterval(tickClock, 30000);
 
-        // ---------- Conversation waveform (decorative) ----------
+        // ========== Chat — text input ==========
+        const transcript = document.getElementById('transcript');
+        const chatTextarea = document.getElementById('chat-textarea');
+        const sendBtn = document.getElementById('send-btn');
+        let chatHistory = [];   // Gemini multi-turn format: [{role, parts}]
+        let isSending = false;
+
+        // Simple markdown-ish rendering (bold, code, lists)
+        function renderReply(text) {
+            return text
+                .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+                .replace(/`(.+?)`/g, '<code>$1</code>')
+                .replace(/\n/g, '<br>');
+        }
+
+        // Auto-grow textarea
+        chatTextarea.addEventListener('input', () => {
+            chatTextarea.style.height = 'auto';
+            chatTextarea.style.height = Math.min(chatTextarea.scrollHeight, 80) + 'px';
+        });
+
+        // Enter to send (Shift+Enter for newline)
+        chatTextarea.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                handleSend();
+            }
+        });
+        sendBtn.addEventListener('click', handleSend);
+
+        function appendBubble(role, html) {
+            const wrap = document.createElement('div');
+            if (role === 'user') {
+                wrap.className = 'flex flex-col gap-2 max-w-[85%] self-end items-end';
+                wrap.innerHTML = `
+                    <span class="font-label-caps text-[9px] text-on-surface-variant tracking-widest">YOU</span>
+                    <div class="p-5 rounded-xl bg-primary-container text-on-primary-container shadow-lg">
+                        <p class="font-body-md leading-relaxed">${html}</p>
+                    </div>`;
+            } else {
+                wrap.className = 'flex flex-col gap-2 max-w-[85%]';
+                wrap.innerHTML = `
+                    <span class="font-label-caps text-[9px] text-secondary tracking-widest">DAVINCI</span>
+                    <div class="p-5 rounded-xl bg-white/5 backdrop-blur-md bento-border inner-glow-1px-white-10">
+                        <div class="font-body-md text-on-surface leading-relaxed ai-reply">${html}</div>
+                    </div>`;
+            }
+            transcript.appendChild(wrap);
+            scrollToBottom();
+            return wrap;
+        }
+
+        function showTyping() {
+            const wrap = document.createElement('div');
+            wrap.className = 'flex flex-col gap-2 max-w-[85%]';
+            wrap.id = 'typing-bubble';
+            wrap.innerHTML = `
+                <span class="font-label-caps text-[9px] text-secondary tracking-widest">DAVINCI</span>
+                <div class="p-3 rounded-xl bg-white/5 backdrop-blur-md bento-border inner-glow-1px-white-10">
+                    <div class="typing-indicator"><span></span><span></span><span></span></div>
+                </div>`;
+            transcript.appendChild(wrap);
+            scrollToBottom();
+        }
+
+        function removeTyping() {
+            const el = document.getElementById('typing-bubble');
+            if (el) el.remove();
+        }
+
+        function scrollToBottom() {
+            const main = transcript.closest('main');
+            if (main) setTimeout(() => main.scrollTop = main.scrollHeight, 50);
+        }
+
+        async function handleSend() {
+            const text = chatTextarea.value.trim();
+            if (!text || isSending) return;
+            isSending = true;
+
+            // Show user bubble
+            appendBubble('user', text.replace(/</g, '&lt;').replace(/>/g, '&gt;'));
+            chatTextarea.value = '';
+            chatTextarea.style.height = 'auto';
+
+            // Show typing indicator
+            showTyping();
+
+            try {
+                const res = await fetch('/api/chat', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ message: text, history: chatHistory }),
+                });
+                const data = await res.json();
+                removeTyping();
+
+                if (data.error) {
+                    appendBubble('model', `<span class="text-error">⚠ ${data.error}</span>`);
+                } else {
+                    appendBubble('model', renderReply(data.reply));
+                    // Update history for multi-turn
+                    chatHistory.push({ role: 'user', parts: [{ text }] });
+                    chatHistory.push({ role: 'model', parts: [{ text: data.reply }] });
+                }
+            } catch (err) {
+                removeTyping();
+                appendBubble('model', `<span class="text-error">⚠ Network error — is the server running?</span>`);
+                console.error(err);
+            }
+            isSending = false;
+        }
+
+        // ========== Decorative waveform ==========
         const waveform = document.getElementById('waveform');
         if (waveform) {
             for (let i = 0; i < 40; i++) {
@@ -657,20 +854,9 @@
                 bar.style.backgroundColor = 'rgba(255,255,255,0.1)';
                 waveform.appendChild(bar);
             }
-            const micBtn = document.getElementById('mic-btn');
-            let listening = false;
-            if (micBtn) micBtn.addEventListener('click', () => { listening = !listening; });
-            (function animateWave() {
-                waveform.querySelectorAll('div').forEach(bar => {
-                    const h = listening ? Math.random() * 36 + 4 : Math.random() * 6 + 2;
-                    bar.style.height = h + 'px';
-                    bar.style.backgroundColor = listening ? '#ff571a' : 'rgba(255,255,255,0.1)';
-                });
-                setTimeout(() => requestAnimationFrame(animateWave), 110);
-            })();
         }
 
-        // ---------- VISION: real camera + loop (stubbed backend) ----------
+        // ========== VISION: real camera + Gemini vision API ==========
         const video = document.getElementById('feed');
         const startBtn = document.getElementById('startBtn');
         const stopBtn = document.getElementById('stopBtn');
@@ -678,10 +864,13 @@
         const guidance = document.getElementById('guidance');
         const vState = document.getElementById('vision-state');
         const vDot = document.getElementById('vision-dot');
+        const visionQuestion = document.getElementById('vision-question');
+        const visionAskBtn = document.getElementById('vision-ask-btn');
 
         let stream = null;
         let looping = false;
         let lastSpoken = '';
+        let visionBusy = false;
 
         function setVisionState(label, live) {
             if (vState) vState.textContent = label;
@@ -703,7 +892,10 @@
                 startBtn.classList.add('hidden');
                 stopBtn.classList.remove('hidden');
                 looping = true;
-                runLoop();
+                // Don't auto-loop — wait for user to ask
+                showGuidance('Camera is live. Ask a question or I\'ll describe what I see.');
+                // Do one initial auto-describe after 2 seconds
+                setTimeout(() => { if (looping && !visionBusy) analyzeFrame(); }, 2000);
             } catch (err) {
                 let msg = 'Camera error: ' + err.name;
                 if (err.name === 'NotAllowedError') msg = 'Permission denied — allow camera and tap Summon again.';
@@ -737,46 +929,60 @@
 
         function showGuidance(text) {
             if (!text || !guidance) return;
-            if (text === lastSpoken) return;          // speak-on-change gate
             lastSpoken = text;
             guidance.textContent = text;
             guidance.style.opacity = '1';
-            // Voice out
+        }
+
+        // Send a frame to /api/vision
+        async function analyzeFrame(question) {
+            if (!looping || visionBusy) return;
+            visionBusy = true;
+            setVisionState('ANALYZING', true);
+
             try {
-                const u = new SpeechSynthesisUtterance(text);
-                speechSynthesis.cancel();
-                speechSynthesis.speak(u);
-            } catch (e) { }
-        }
-
-        // Self-paced loop. Right now /analyze is a STUB — swap for the real
-        // vision call + your friend's orchestrator later.
-        async function runLoop() {
-            while (looping) {
                 const frame = grabFrame();
-                try {
-                    const guide = await fakeAnalyze(frame);   // <-- replace with fetch('/analyze', …)
-                    showGuidance(guide);
-                } catch (e) { console.error(e); }
-                await new Promise(r => setTimeout(r, 1800));
+                const res = await fetch('/api/vision', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ image: frame, question: question || '' }),
+                });
+                const data = await res.json();
+                if (data.error) {
+                    showGuidance('⚠ ' + data.error);
+                } else {
+                    showGuidance(data.reply);
+                    // Speak the response
+                    try {
+                        const u = new SpeechSynthesisUtterance(data.reply);
+                        speechSynthesis.cancel();
+                        speechSynthesis.speak(u);
+                    } catch (e) { }
+                }
+            } catch (err) {
+                showGuidance('⚠ Network error — is the server running?');
+                console.error(err);
             }
+            visionBusy = false;
+            setVisionState('WATCHING', true);
         }
 
-        // STUB backend: cycles through canned coaching lines so the loop is visible.
-        const cannedLines = [
-            'Camera is live — point it at what you\u2019re working on.',
-            'I can see the scene. Hold steady while I take a look.',
-            'Looks good. Tell me what you\u2019d like help with.'
-        ];
-        let cannedIdx = 0;
-        async function fakeAnalyze() {
-            await new Promise(r => setTimeout(r, 400));
-            const line = cannedLines[Math.min(cannedIdx, cannedLines.length - 1)];
-            cannedIdx++;
-            return line;
-        }
+        // Vision ask button
+        visionAskBtn.addEventListener('click', () => {
+            const q = visionQuestion.value.trim();
+            if (looping) analyzeFrame(q);
+            visionQuestion.value = '';
+        });
+        visionQuestion.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                const q = visionQuestion.value.trim();
+                if (looping) analyzeFrame(q);
+                visionQuestion.value = '';
+            }
+        });
 
-        // Start on home
+        // ========== Init ==========
         showScreen('home');
     </script>
 </body>

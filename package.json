@@ -3,11 +3,22 @@
     "version": "1.0.0",
     "main": "server.js",
     "scripts": {
-        "start": "node server.js"
+        "start": "node server.js",
+        "dev": "tsx watch src/server.ts",
+        "build": "tsc",
+        "serve": "node dist/index.js"
     },
     "dependencies": {
-        "@google/generative-ai": "^0.24.1",
+        "@google/genai": "^2.8.0",
+        "cors": "^2.8.6",
         "dotenv": "^16.6.1",
         "express": "^4.18.2"
+    },
+    "devDependencies": {
+        "@types/cors": "^2.8.19",
+        "@types/express": "^5.0.6",
+        "@types/node": "^25.9.2",
+        "tsx": "^4.22.4",
+        "typescript": "^6.0.3"
     }
 }

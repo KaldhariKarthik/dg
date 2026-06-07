@@ -698,6 +698,44 @@
             </div>
         </section>
 
+        <!-- Dynamic Memory Data (fetched from Firestore/local) -->
+        <section id="memory-data-section" class="glass-card bento-border rounded-bento p-6 space-y-4 mb-6">
+            <div class="flex justify-between items-center">
+                <h2 class="font-label-caps text-label-caps text-primary/50 tracking-widest uppercase">What I Remember</h2>
+                <button id="memory-refresh-btn" class="material-symbols-outlined text-primary text-sm opacity-50 hover:opacity-100 transition-opacity cursor-pointer bg-transparent border-none" title="Refresh memory">refresh</button>
+            </div>
+            <div id="memory-loading" class="text-on-surface-variant text-sm opacity-60">Loading memory...</div>
+            <div id="memory-content" class="space-y-4 hidden">
+                <!-- Preferences -->
+                <div>
+                    <div class="flex items-center gap-2 mb-2">
+                        <span class="material-symbols-outlined text-primary text-base">tune</span>
+                        <p class="font-label-caps text-label-caps text-primary">Preferences</p>
+                    </div>
+                    <div id="memory-preferences" class="space-y-1 pl-6"></div>
+                </div>
+                <!-- Past Patterns -->
+                <div>
+                    <div class="flex items-center gap-2 mb-2">
+                        <span class="material-symbols-outlined text-primary text-base">pattern</span>
+                        <p class="font-label-caps text-label-caps text-primary">Patterns</p>
+                    </div>
+                    <div id="memory-patterns" class="space-y-1 pl-6"></div>
+                </div>
+                <!-- Long-term Facts -->
+                <div>
+                    <div class="flex items-center gap-2 mb-2">
+                        <span class="material-symbols-outlined text-primary text-base">lightbulb</span>
+                        <p class="font-label-caps text-label-caps text-primary">Facts</p>
+                    </div>
+                    <div id="memory-facts" class="space-y-1 pl-6"></div>
+                </div>
+            </div>
+            <div id="memory-empty" class="hidden text-on-surface-variant text-sm opacity-60 italic">
+                No memories yet. Start chatting and DaVinci will learn about you.
+            </div>
+        </section>
+
         <!-- Privacy statement — HONEST -->
         <section
             class="glass-card bento-border rounded-bento p-6 bg-secondary-container/5 border-secondary-container/20 space-y-4">
@@ -761,10 +799,82 @@
             const chatWrap = document.getElementById('chat-input-wrap');
             if (chatWrap) chatWrap.style.display = name === 'conversation' ? '' : 'none';
             window.scrollTo(0, 0);
+            if (name === 'memory') fetchMemory();
         }
         document.querySelectorAll('.navlink').forEach(n => {
             n.addEventListener('click', () => showScreen(n.dataset.screen));
         });
+
+        // ========== Memory fetch ==========
+        async function fetchMemory() {
+            const loading = document.getElementById('memory-loading');
+            const content = document.getElementById('memory-content');
+            const empty = document.getElementById('memory-empty');
+            const prefsEl = document.getElementById('memory-preferences');
+            const patternsEl = document.getElementById('memory-patterns');
+            const factsEl = document.getElementById('memory-facts');
+
+            if (loading) loading.classList.remove('hidden');
+            if (content) content.classList.add('hidden');
+            if (empty) empty.classList.add('hidden');
+
+            try {
+                const res = await fetch('/api/memory');
+                const data = await res.json();
+
+                const prefs = data.preferences || {};
+                const patterns = data.past_patterns || [];
+                const facts = data.long_term_facts || [];
+
+                const hasData = Object.keys(prefs).length > 0 || patterns.length > 0 || facts.length > 0;
+
+                if (!hasData) {
+                    if (loading) loading.classList.add('hidden');
+                    if (empty) empty.classList.remove('hidden');
+                    return;
+                }
+
+                // Render preferences
+                prefsEl.innerHTML = Object.keys(prefs).length === 0
+                    ? '<p class="text-on-surface-variant text-sm opacity-40 italic">None yet</p>'
+                    : Object.entries(prefs).map(([k, v]) =>
+                        `<div class="flex items-center gap-2 p-2 rounded-lg bg-white/5 border border-white/5">
+                            <span class="text-primary/70 text-xs font-semibold uppercase">${k}:</span>
+                            <span class="text-on-surface-variant text-sm">${v}</span>
+                        </div>`
+                    ).join('');
+
+                // Render patterns
+                patternsEl.innerHTML = patterns.length === 0
+                    ? '<p class="text-on-surface-variant text-sm opacity-40 italic">None yet</p>'
+                    : patterns.map(p =>
+                        `<div class="flex items-start gap-2 p-2 rounded-lg bg-white/5 border border-white/5">
+                            <span class="text-secondary-container mt-0.5">•</span>
+                            <span class="text-on-surface-variant text-sm">${p}</span>
+                        </div>`
+                    ).join('');
+
+                // Render facts
+                factsEl.innerHTML = facts.length === 0
+                    ? '<p class="text-on-surface-variant text-sm opacity-40 italic">None yet</p>'
+                    : facts.map(f =>
+                        `<div class="flex items-start gap-2 p-2 rounded-lg bg-white/5 border border-white/5">
+                            <span class="text-secondary-container mt-0.5">•</span>
+                            <span class="text-on-surface-variant text-sm">${f}</span>
+                        </div>`
+                    ).join('');
+
+                if (loading) loading.classList.add('hidden');
+                if (content) content.classList.remove('hidden');
+            } catch (err) {
+                console.error('Failed to fetch memory:', err);
+                if (loading) loading.textContent = 'Could not load memory.';
+            }
+        }
+
+        // Refresh button
+        const memRefreshBtn = document.getElementById('memory-refresh-btn');
+        if (memRefreshBtn) memRefreshBtn.addEventListener('click', fetchMemory);
 
         // ========== Clock / date ==========
         function tickClock() {

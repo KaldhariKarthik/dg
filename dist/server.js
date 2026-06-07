@@ -34,8 +34,10 @@ const orchestrator_1 = require("./agents/orchestrator");
 const researcher_1 = require("./agents/researcher");
 const planner_1 = require("./agents/planner");
 const executor_1 = require("./agents/executor");
+const conversational_1 = require("./agents/conversational");
 const gemini_1 = require("./llm/gemini");
 const fileStore_1 = require("./store/fileStore");
+const synthesizer_1 = require("./core/synthesizer");
 // --- config -----------------------------------------------------------------
 const PORT = process.env.PORT ? Number(process.env.PORT) : 8080;
 const apiKey = process.env.GEMINI_API_KEY ?? process.env.API_KEY;
@@ -56,10 +58,15 @@ const registry = new registry_1.AgentRegistry();
 registry.register(new researcher_1.ResearcherAgent(gemini)); // real
 registry.register(new planner_1.PlannerAgent(gemini)); // real
 registry.register(new executor_1.ExecutorAgent()); // dummy (no LLM needed yet)
+registry.register(new conversational_1.ConversationalAgent(gemini)); // real
 // LlmRouter is the brain; KeywordRouter stays available as a fallback class.
 const router = new router_1.LlmRouter(gemini);
 void router_1.KeywordRouter; // kept intentionally for future fallback wiring
-const orchestrator = new orchestrator_1.Orchestrator(registry, router, { maxSteps: 4 });
+// LlmSynthesizer fuses multi-agent turns into one DaVinci voice;
+// LastMessageSynthesizer stays available as the no-key / test fallback.
+const synth = new synthesizer_1.LlmSynthesizer(gemini);
+void synthesizer_1.LastMessageSynthesizer;
+const orchestrator = new orchestrator_1.Orchestrator(registry, router, synth, { maxSteps: 8 });
 const store = new fileStore_1.FileStore();
 // Raw Gemini client for the perception endpoint.
 const visionAI = new genai_1.GoogleGenAI({ apiKey });

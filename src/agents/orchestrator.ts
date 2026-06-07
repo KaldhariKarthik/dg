@@ -15,9 +15,10 @@
  * more than maxSteps times. An LLM router could otherwise ping-pong forever.
  * Gemini decides DIRECTION; this cap enforces a LIMIT. Both, always.
  *
- * Note the orchestrator imports neither the concrete agents nor the concrete
- * router — only interfaces + the registry. That decoupling is what lets you
- * add agents or swap the brain without editing this file.
+ * THE TWO SOCKETS: the orchestrator imports neither concrete agents, nor the
+ * concrete router, nor the concrete synthesizer — only interfaces + the
+ * registry. The Router decides which agent acts; the Synthesizer decides what
+ * the user finally hears. Swap either brain without editing this file.
  */
 
 import {
@@ -29,6 +30,7 @@ import {
 } from "../core/types";
 import { AgentRegistry } from "../core/registry";
 import { Router } from "../core/router";
+import { Synthesizer } from "../core/synthesizer";
 
 export interface OrchestratorOptions {
     /** Hard upper bound on agent calls per turn. The seatbelt. */
@@ -41,12 +43,13 @@ export class Orchestrator {
     constructor(
         private registry: AgentRegistry,
         private router: Router,
+        private synth: Synthesizer,
         private opts: OrchestratorOptions = {}
     ) { }
 
     /**
      * Run one full turn: loop agents until the router finishes or the step cap
-     * is hit, then return a single assembled response for the user.
+     * is hit, then synthesize a single assembled response for the user.
      */
     async run(req: AgentRequest, ctx: Context): Promise<AgentResponse> {
         const maxSteps = this.opts.maxSteps ?? 8;
@@ -65,7 +68,9 @@ export class Orchestrator {
             if (decision.action === "finish") {
                 // Guard: never finish having done nothing. If the router bails on the
                 // very first step (e.g. an ambiguous "ok and"), force one agent call
-                // so the user always gets a real response.
+                // so the user always gets a real response. Prefer the conversational
+                // agent here — a no-work turn is usually filler, and it should NOT
+                // leak into the researcher (or planner).
                 if (soFar.length === 0) {
                     const avail = this.registry.available();
                     const fallbackAgent = avail.includes("conversational")
@@ -110,14 +115,22 @@ export class Orchestrator {
             stopReason = `step cap reached (${maxSteps})`;
         }
 
-        return this.assemble(soFar, stopReason);
+        return this.assemble(req, soFar, stopReason);
     }
 
-    /** Combine the agents' outputs into one user-facing response. */
-    private assemble(
+    /**
+     * Fold the agents' outputs into one user-facing response.
+     *
+     * The human-readable `message` now comes from the Synthesizer (single hop ->
+     * verbatim; multiple hops -> fused into DaVinci's voice). Status and the
+     * `data.steps` debug trace are computed here as before. Persistence already
+     * happened in the loop via stateDelta, so synthesis touches only the words.
+     */
+    private async assemble(
+        req: AgentRequest,
         soFar: AgentResponse[],
         stopReason: string
-    ): AgentResponse {
+    ): Promise<AgentResponse> {
         if (soFar.length === 0) {
             return {
                 contractVersion: CONTRACT_VERSION,
@@ -128,20 +141,22 @@ export class Orchestrator {
             };
         }
 
-        // For now: the final answer is the last agent's message. (When Gemini is
-        // the router, it can synthesize a richer summary across all of soFar.)
-        const last = soFar[soFar.length - 1];
         const worstStatus = soFar.some((r) => r.status === "error")
             ? "error"
             : soFar.some((r) => r.status === "partial")
                 ? "partial"
                 : "ok";
 
+        const message = await this.synth.synthesize({
+            input: req.input,
+            soFar,
+        });
+
         return {
             contractVersion: CONTRACT_VERSION,
             from: this.name,
             status: worstStatus,
-            message: last.message,
+            message,
             data: { steps: soFar.map((r) => ({ from: r.from, status: r.status })) },
             diagnostics: [`stopReason: ${stopReason}`],
         };

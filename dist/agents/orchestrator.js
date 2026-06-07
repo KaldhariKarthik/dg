@@ -16,9 +16,10 @@
  * more than maxSteps times. An LLM router could otherwise ping-pong forever.
  * Gemini decides DIRECTION; this cap enforces a LIMIT. Both, always.
  *
- * Note the orchestrator imports neither the concrete agents nor the concrete
- * router — only interfaces + the registry. That decoupling is what lets you
- * add agents or swap the brain without editing this file.
+ * THE TWO SOCKETS: the orchestrator imports neither concrete agents, nor the
+ * concrete router, nor the concrete synthesizer — only interfaces + the
+ * registry. The Router decides which agent acts; the Synthesizer decides what
+ * the user finally hears. Swap either brain without editing this file.
  */
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.Orchestrator = void 0;
@@ -26,16 +27,18 @@ const types_1 = require("../core/types");
 class Orchestrator {
     registry;
     router;
+    synth;
     opts;
     name = "orchestrator";
-    constructor(registry, router, opts = {}) {
+    constructor(registry, router, synth, opts = {}) {
         this.registry = registry;
         this.router = router;
+        this.synth = synth;
         this.opts = opts;
     }
     /**
      * Run one full turn: loop agents until the router finishes or the step cap
-     * is hit, then return a single assembled response for the user.
+     * is hit, then synthesize a single assembled response for the user.
      */
     async run(req, ctx) {
         const maxSteps = this.opts.maxSteps ?? 8;
@@ -91,10 +94,17 @@ class Orchestrator {
         if (steps >= maxSteps) {
             stopReason = `step cap reached (${maxSteps})`;
         }
-        return this.assemble(soFar, stopReason);
+        return this.assemble(req, soFar, stopReason);
     }
-    /** Combine the agents' outputs into one user-facing response. */
-    assemble(soFar, stopReason) {
+    /**
+     * Fold the agents' outputs into one user-facing response.
+     *
+     * The human-readable `message` now comes from the Synthesizer (single hop ->
+     * verbatim; multiple hops -> fused into DaVinci's voice). Status and the
+     * `data.steps` debug trace are computed here as before. Persistence already
+     * happened in the loop via stateDelta, so synthesis touches only the words.
+     */
+    async assemble(req, soFar, stopReason) {
         if (soFar.length === 0) {
             return {
                 contractVersion: types_1.CONTRACT_VERSION,
@@ -104,19 +114,20 @@ class Orchestrator {
                 diagnostics: [`stopReason: ${stopReason}`],
             };
         }
-        // For now: the final answer is the last agent's message. (When Gemini is
-        // the router, it can synthesize a richer summary across all of soFar.)
-        const last = soFar[soFar.length - 1];
         const worstStatus = soFar.some((r) => r.status === "error")
             ? "error"
             : soFar.some((r) => r.status === "partial")
                 ? "partial"
                 : "ok";
+        const message = await this.synth.synthesize({
+            input: req.input,
+            soFar,
+        });
         return {
             contractVersion: types_1.CONTRACT_VERSION,
             from: this.name,
             status: worstStatus,
-            message: last.message,
+            message,
             data: { steps: soFar.map((r) => ({ from: r.from, status: r.status })) },
             diagnostics: [`stopReason: ${stopReason}`],
         };

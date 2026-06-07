@@ -2,14 +2,17 @@
 /**
  * src/agents/planner.ts
  *
- * REAL agent. The one with MEMORY.
+ * REAL agent. The one with MEMORY, now DATE-AWARE and not rigid.
  *
- * Plans are stored as structured objects in ctx.state.plans (persisted by the
- * Store). The planner reads existing plans, decides create/update/report, and
- * writes the updated set back via stateDelta.
+ * Plans are structured objects in ctx.state.plans (persisted by the Store).
+ * The planner reads existing plans + recent conversation, decides
+ * create/update/report, and writes the updated set back via stateDelta.
  *
- * Time-aware: it reasons about the goal's timeframe ("this month" -> weekly
- * milestones, "this week" -> daily, etc.) rather than emitting generic steps.
+ * Design fixes from earlier:
+ *  - It knows TODAY'S DATE, so "this month" / "23 days" map to real dates.
+ *  - It chooses the NATURAL breakdown for the timeframe (no forced weeks).
+ *  - It replies about the RELEVANT plan only (mentions others briefly if it
+ *    actually matters), instead of dumping every plan every time.
  */
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.PlannerAgent = void 0;
@@ -25,52 +28,59 @@ class PlannerAgent {
             ? req.input.text
             : `Based on this scene: ${req.input.text ?? "(image)"}`;
         const existingPlans = this.readPlans(ctx);
-        const now = new Date().toISOString();
+        const now = new Date();
+        const nowIso = now.toISOString();
+        const human = now.toLocaleDateString("en-US", {
+            weekday: "long",
+            year: "numeric",
+            month: "long",
+            day: "numeric",
+        });
         const convo = ctx.history.slice(-6).length === 0
             ? "(no prior conversation)"
-            : ctx.history
-                .slice(-6)
-                .map((t) => `${t.role}: ${t.message}`)
-                .join("\n");
-        const system = "You are the Planner in a personal assistant system. You create and " +
-            "track the user's goals over time, and you are TIME-AWARE.\n\n" +
-            "TIMEFRAME RULES:\n" +
-            "- If the user gives a timeframe, structure the plan around it with " +
-            "concrete milestones:\n" +
-            "  * 'this month' / '30 days' -> break into ~4 WEEKLY phases (Week 1-4), " +
-            "each week a step (or a few) with a clear milestone.\n" +
-            "  * 'this week' / '7 days' -> break into DAILY steps.\n" +
-            "  * 'this year' -> monthly phases.\n" +
-            "- Use the 'phase' field on each step to label it (e.g. 'Week 1').\n" +
-            "- Make steps specific and progressive, not generic.\n\n" +
-            "MEMORY RULES:\n" +
-            "- You are given the user's current plans as JSON. Keep ALL existing " +
-            "plans unless the user clearly abandons one. Preserve ids and createdAt.\n" +
-            "- To update progress, set steps' done=true. To check in, just report.\n\n" +
+            : ctx.history.slice(-6).map((t) => `${t.role}: ${t.message}`).join("\n");
+        const system = "You are the Planner in the DaVinci assistant. You create and track the " +
+            "user's goals over time. You know today's date and reason about real " +
+            "timeframes.\n\n" +
+            "TIMEFRAME — be sensible, NOT rigid:\n" +
+            "- Compute the target end date from today's date and the user's " +
+            "timeframe (e.g. '23 days' = today + 23 days; 'this month' = end of the " +
+            "current month).\n" +
+            "- Break the plan into whatever chunks NATURALLY fit that duration. " +
+            "Do NOT force weeks. 23 days might be 3 phases of ~8 days, or milestone-" +
+            "based. A weekend goal might be hours. Use your judgment and label each " +
+            "phase honestly (e.g. 'Days 1-8', 'By June 15').\n" +
+            "- Steps must be specific and progressive, sized to the real timeframe.\n\n" +
+            "RESPONSE SCOPE:\n" +
+            "- Reply about the plan the user is actually discussing. Do NOT recite " +
+            "every plan. You MAY briefly mention another plan only if it's genuinely " +
+            "relevant (e.g. scheduling conflict).\n\n" +
+            "MEMORY:\n" +
+            "- You get all current plans as JSON. Keep them all unless the user " +
+            "abandons one. Preserve ids/createdAt. Mark steps done to track progress.\n\n" +
             "Return STRICT JSON only, no markdown, EXACTLY:\n" +
             "{\n" +
-            '  "reply": "<friendly message that ALSO lists the plan steps grouped ' +
-            'by phase, using line breaks and a checkmark for done steps>",\n' +
-            '  "plans": [{"id":"<slug>","goal":"<goal>","timeframe":"<e.g. 1 month>",' +
-            '"steps":[{"text":"<step>","done":false,"phase":"Week 1"}],' +
-            '"createdAt":"<iso>","updatedAt":"<iso>"}]\n' +
-            "}\n\n" +
-            "In 'reply', format the steps readably, e.g.:\n" +
-            "Week 1: <step>\nWeek 2: <step>\n... Use a checkmark for done steps.";
-        const user = `Recent conversation:\n${convo}\n\n` +
+            '  "reply": "<friendly message that lists THIS plan\'s steps readably, ' +
+            'grouped by your chosen phase labels, with a checkmark for done steps>",\n' +
+            '  "plans": [{"id":"<slug>","goal":"<goal>","timeframe":"<e.g. 23 days>",' +
+            '"targetDate":"<iso date or empty>","steps":[{"text":"<step>",' +
+            '"done":false,"phase":"<your label>"}],"createdAt":"<iso>",' +
+            '"updatedAt":"<iso>"}]\n' +
+            "}";
+        const user = `Today is ${human} (${nowIso}).\n\n` +
+            `Recent conversation:\n${convo}\n\n` +
             `Current plans (JSON):\n${JSON.stringify(existingPlans, null, 2)}\n\n` +
-            `Current time: ${now}\n` +
             `User message: ${userText}\n\n` +
-            `If the message is a vague follow-up (e.g. "ok and", "continue", ` +
-            `"what next"), interpret it using the conversation and existing plans ` +
-            `— usually it means continue/expand the most recent plan.\n` +
+            `If the message is a vague follow-up ("ok and", "continue", "what ` +
+            `next"), interpret it using the conversation + plans — usually it means ` +
+            `continue/expand the most recently discussed plan.\n` +
             `Return the updated state as JSON.`;
         let raw;
         try {
             raw = await this.llm.complete([
                 { role: "system", content: system },
                 { role: "user", content: user },
-            ], { temperature: 0.3 });
+            ], { temperature: 0.4 });
         }
         catch (err) {
             const msg = err instanceof Error ? err.message : String(err);
@@ -99,8 +109,6 @@ class PlannerAgent {
             status: "ok",
             message: result.reply,
             data: { planCount: result.plans.length },
-            // Replace the whole plans array. Note: we set plans directly (not merge)
-            // so stale keys from older versions don't accumulate.
             stateDelta: { plans: result.plans },
         };
     }

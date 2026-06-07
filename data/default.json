@@ -49,6 +49,26 @@
       "role": "conversational",
       "message": "Take your time to think it over! Would you like to see a quick day-by-day breakdown for those 5 days?",
       "at": "2026-06-07T09:38:21.638Z"
+    },
+    {
+      "role": "user",
+      "message": "hey hows it going ?",
+      "at": "2026-06-07T09:57:18.363Z"
+    },
+    {
+      "role": "conversational",
+      "message": "Hey! Doing great, thanks for asking. How are you doing today?",
+      "at": "2026-06-07T09:57:22.695Z"
+    },
+    {
+      "role": "user",
+      "message": "find the best month to trek Kedarnath and add it to my plan",
+      "at": "2026-06-07T09:58:26.287Z"
+    },
+    {
+      "role": "researcher",
+      "message": "The best months to trek Kedarnath are **May to June** (for pleasant summer weather) and **September to October** (for clear, crisp post-monsoon skies). Since Kedarnath is in Uttarakhand and your previous plan was for Ladakh, these two destinations are too far apart to combine in one short trip. Would you like me to create a new 5-day itinerary specifically for the Kedarnath trek instead?",
+      "at": "2026-06-07T09:58:33.743Z"
     }
   ],
   "plans": [

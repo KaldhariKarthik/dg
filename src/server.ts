@@ -34,6 +34,7 @@ import { ExecutorAgent } from "./agents/executor";
 import { ConversationalAgent } from "./agents/conversational";
 import { GeminiProvider } from "./llm/gemini";
 import { FileStore } from "./store/fileStore";
+import { LastMessageSynthesizer, LlmSynthesizer, Synthesizer } from "./core/synthesizer";
 
 // --- config -----------------------------------------------------------------
 const PORT = process.env.PORT ? Number(process.env.PORT) : 8080;
@@ -67,7 +68,12 @@ registry.register(new ConversationalAgent(gemini)); // real
 const router: Router = new LlmRouter(gemini);
 void KeywordRouter; // kept intentionally for future fallback wiring
 
-const orchestrator = new Orchestrator(registry, router, { maxSteps: 8 });
+// LlmSynthesizer fuses multi-agent turns into one DaVinci voice;
+// LastMessageSynthesizer stays available as the no-key / test fallback.
+const synth: Synthesizer = new LlmSynthesizer(gemini);
+void LastMessageSynthesizer;
+
+const orchestrator = new Orchestrator(registry, router, synth, { maxSteps: 8 });
 const store = new FileStore();
 
 // Raw Gemini client for the perception endpoint.

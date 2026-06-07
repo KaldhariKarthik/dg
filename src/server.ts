@@ -23,7 +23,6 @@ import "dotenv/config";
 import express, { Request, Response } from "express";
 import cors from "cors";
 import { GoogleGenAI } from "@google/genai";
-
 import { AgentRequest, Context, CONTRACT_VERSION } from "./core/types";
 import { AgentRegistry } from "./core/registry";
 import { KeywordRouter, LlmRouter, Router } from "./core/router";
@@ -34,6 +33,7 @@ import { ExecutorAgent } from "./agents/executor";
 import { ConversationalAgent } from "./agents/conversational";
 import { GeminiProvider } from "./llm/gemini";
 import { FileStore } from "./store/fileStore";
+import { MemoryStore } from "./store/memoryStore";
 import { LastMessageSynthesizer, LlmSynthesizer, Synthesizer } from "./core/synthesizer";
 import { GoogleAuth, NotConnectedError } from "./adapters/google-auth";
 import { GoogleGmailAdapter } from "./adapters/gmail";
@@ -62,6 +62,7 @@ const gemini = new GeminiProvider({ apiKey });
 console.log(`[brain] Gemini active (${gemini.modelId})`);
 
 const store = new FileStore();
+const memoryStore = new MemoryStore();
 
 // Google OAuth — shared by Gmail today and Calendar later. Optional at boot:
 // if the Google env vars aren't set, the executor still loads and will simply
@@ -123,7 +124,6 @@ const calendarFactory = (sessionId: string) => {
 const registry = new AgentRegistry();
 registry.register(new ResearcherAgent(gemini)); // real
 registry.register(new PlannerAgent(gemini)); // real
-registry.register(new ExecutorAgent()); // dummy (no LLM needed yet)
 registry.register(new ConversationalAgent(gemini)); // real
 registry.register(new ExecutorAgent(gemini, gmailFactory, calendarFactory)); // real (Gmail + Calendar)
 
@@ -136,9 +136,7 @@ void KeywordRouter; // kept intentionally for future fallback wiring
 const synth: Synthesizer = new LlmSynthesizer(gemini);
 void LastMessageSynthesizer;
 
-const orchestrator = new Orchestrator(registry, router, synth, { maxSteps: 8 });
-const store = new FileStore();
-const orchestrator = new Orchestrator(registry, router, { maxSteps: 4 });
+const orchestrator = new Orchestrator(registry, router, synth, gemini, memoryStore, { maxSteps: 4 });
 
 // Raw Gemini client for the perception endpoint.
 const visionAI = new GoogleGenAI({ apiKey });

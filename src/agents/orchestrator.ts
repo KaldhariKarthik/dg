@@ -119,8 +119,7 @@ export class Orchestrator {
             stopReason = `step cap reached (${maxSteps})`;
         }
 
-        return this.assemble(req, soFar, stopReason);
-        const response = this.assemble(soFar, stopReason);
+        const response = await this.assemble(req, soFar, stopReason);
 
         // Run memory extraction in the background (asynchronous/non-blocking)
         this.updateMemory(ctx).catch(err => console.error("[memory] Background update failed:", err));

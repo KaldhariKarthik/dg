@@ -1,12 +1,11 @@
 {
     "name": "davinci-demo",
     "version": "1.0.0",
-    "main": "server.js",
+    "main": "dist/server.js",
     "scripts": {
-        "start": "node server.js",
         "dev": "tsx watch src/server.ts",
         "build": "tsc",
-        "serve": "node dist/index.js"
+        "start": "node dist/server.js"
     },
     "dependencies": {
         "@google/genai": "^2.8.0",

@@ -217,6 +217,7 @@
             gap: 4px;
             padding: 12px 18px;
         }
+
         .typing-indicator span {
             width: 6px;
             height: 6px;
@@ -224,11 +225,28 @@
             background: rgba(255, 255, 255, 0.4);
             animation: typingBounce 1.4s ease-in-out infinite;
         }
-        .typing-indicator span:nth-child(2) { animation-delay: 0.2s; }
-        .typing-indicator span:nth-child(3) { animation-delay: 0.4s; }
+
+        .typing-indicator span:nth-child(2) {
+            animation-delay: 0.2s;
+        }
+
+        .typing-indicator span:nth-child(3) {
+            animation-delay: 0.4s;
+        }
+
         @keyframes typingBounce {
-            0%, 60%, 100% { transform: translateY(0); opacity: 0.4; }
-            30% { transform: translateY(-6px); opacity: 1; }
+
+            0%,
+            60%,
+            100% {
+                transform: translateY(0);
+                opacity: 0.4;
+            }
+
+            30% {
+                transform: translateY(-6px);
+                opacity: 1;
+            }
         }
 
         /* Chat input */
@@ -237,6 +255,7 @@
             backdrop-filter: blur(24px);
             -webkit-backdrop-filter: blur(24px);
         }
+
         .chat-textarea {
             background: transparent;
             border: none;
@@ -250,10 +269,14 @@
             max-height: 80px;
             overflow-y: auto;
         }
+
         .chat-textarea::placeholder {
             color: rgba(196, 199, 200, 0.5);
         }
-        .chat-textarea::-webkit-scrollbar { width: 0; }
+
+        .chat-textarea::-webkit-scrollbar {
+            width: 0;
+        }
 
         /* Vision question input */
         .vision-input {
@@ -265,16 +288,36 @@
             font-size: 14px;
             width: 100%;
         }
+
         .vision-input::placeholder {
             color: rgba(196, 199, 200, 0.4);
         }
 
         /* Markdown-ish reply styling */
-        .ai-reply p { margin-bottom: 0.5em; }
-        .ai-reply p:last-child { margin-bottom: 0; }
-        .ai-reply strong { color: #ffffff; }
-        .ai-reply ul, .ai-reply ol { padding-left: 1.2em; margin-bottom: 0.5em; }
-        .ai-reply code { background: rgba(255,255,255,0.08); padding: 2px 6px; border-radius: 4px; font-size: 0.9em; }
+        .ai-reply p {
+            margin-bottom: 0.5em;
+        }
+
+        .ai-reply p:last-child {
+            margin-bottom: 0;
+        }
+
+        .ai-reply strong {
+            color: #ffffff;
+        }
+
+        .ai-reply ul,
+        .ai-reply ol {
+            padding-left: 1.2em;
+            margin-bottom: 0.5em;
+        }
+
+        .ai-reply code {
+            background: rgba(255, 255, 255, 0.08);
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-size: 0.9em;
+        }
     </style>
 </head>
 
@@ -505,12 +548,14 @@
         <!-- Chat input bar -->
         <div class="fixed bottom-20 left-0 w-full z-50">
             <!-- Waveform (voice mode) -->
-            <div class="w-full flex justify-center items-end px-margin-mobile pb-4 h-16 pointer-events-none" id="waveform-wrap" style="display:none;">
+            <div class="w-full flex justify-center items-end px-margin-mobile pb-4 h-16 pointer-events-none"
+                id="waveform-wrap" style="display:none;">
                 <div class="flex items-end gap-[2px] h-full" id="waveform"></div>
             </div>
             <!-- Text input (default mode) -->
             <div id="chat-input-wrap" class="px-4 pb-4">
-                <div class="chat-input-area bento-border rounded-2xl px-4 py-3 flex items-end gap-3 inner-glow-1px-white-10">
+                <div
+                    class="chat-input-area bento-border rounded-2xl px-4 py-3 flex items-end gap-3 inner-glow-1px-white-10">
                     <button id="mic-btn"
                         class="w-10 h-10 rounded-full bg-white/5 border border-white/10 flex items-center justify-center text-on-surface-variant flex-shrink-0 active:scale-90 transition-transform hover:bg-white/10">
                         <span class="material-symbols-outlined" style="font-variation-settings:'FILL' 1;">mic</span>
@@ -700,6 +745,8 @@
         </button>
     </nav>
 
+    <script src="/vision-client.js"></script>
+
     <script>
         // ========== Screen switching ==========
         function showScreen(name) {
@@ -709,7 +756,7 @@
             document.querySelectorAll('.navlink').forEach(n => {
                 n.classList.toggle('active-nav', n.dataset.screen === name);
             });
-            if (name !== 'vision') stopCamera();
+            if (name !== 'vision' && window.VisionAgent) VisionAgent.stop();
             // Show/hide chat input bar only on conversation screen
             const chatWrap = document.getElementById('chat-input-wrap');
             if (chatWrap) chatWrap.style.display = name === 'conversation' ? '' : 'none';
@@ -856,131 +903,27 @@
             }
         }
 
-        // ========== VISION: real camera + Gemini vision API ==========
-        const video = document.getElementById('feed');
-        const startBtn = document.getElementById('startBtn');
-        const stopBtn = document.getElementById('stopBtn');
-        const status = document.getElementById('status');
-        const guidance = document.getElementById('guidance');
-        const vState = document.getElementById('vision-state');
-        const vDot = document.getElementById('vision-dot');
-        const visionQuestion = document.getElementById('vision-question');
-        const visionAskBtn = document.getElementById('vision-ask-btn');
-
-        let stream = null;
-        let looping = false;
-        let lastSpoken = '';
-        let visionBusy = false;
-
-        function setVisionState(label, live) {
-            if (vState) vState.textContent = label;
-            if (vDot) vDot.className = 'w-2 h-2 rounded-full ' + (live ? 'bg-error animate-pulse' : 'bg-white/30');
-        }
-
-        startBtn.addEventListener('click', async () => {
-            if (status) status.textContent = 'Requesting camera…';
-            if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-                status.textContent = 'Camera needs https or localhost.';
-                return;
-            }
-            try {
-                stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' }, audio: false });
-                video.srcObject = stream;
-                await video.play();
-                status.textContent = '';
-                setVisionState('WATCHING', true);
-                startBtn.classList.add('hidden');
-                stopBtn.classList.remove('hidden');
-                looping = true;
-                // Don't auto-loop — wait for user to ask
-                showGuidance('Camera is live. Ask a question or I\'ll describe what I see.');
-                // Do one initial auto-describe after 2 seconds
-                setTimeout(() => { if (looping && !visionBusy) analyzeFrame(); }, 2000);
-            } catch (err) {
-                let msg = 'Camera error: ' + err.name;
-                if (err.name === 'NotAllowedError') msg = 'Permission denied — allow camera and tap Summon again.';
-                else if (err.name === 'NotFoundError') msg = 'No camera found on this device.';
-                else if (err.name === 'NotReadableError') msg = 'Camera busy in another app.';
-                status.textContent = msg;
-                console.error(err);
-            }
+        // ========== VISION: perception module wiring ==========
+        VisionAgent.init({
+            videoEl: document.getElementById('feed'),
+            guidanceEl: document.getElementById('guidance'),
+            stateEl: document.getElementById('vision-state'),
+            dotEl: document.getElementById('vision-dot'),
+            statusEl: document.getElementById('status'),
+            startEl: document.getElementById('startBtn'),
+            stopEl: document.getElementById('stopBtn'),
+            sessionId: 'sess_' + Math.random().toString(36).slice(2, 8),
+            taskContext: { task: null, mode: 'coach' },
+            orchestrate: null, // set to your /api/orchestrate fetch wrapper when it exists
         });
-
-        stopBtn.addEventListener('click', stopCamera);
-
-        function stopCamera() {
-            looping = false;
-            if (stream) { stream.getTracks().forEach(t => t.stop()); stream = null; }
-            if (video) video.srcObject = null;
-            setVisionState('IDLE', false);
-            if (startBtn) startBtn.classList.remove('hidden');
-            if (stopBtn) stopBtn.classList.add('hidden');
-            if (guidance) guidance.style.opacity = '0';
-        }
-
-        function grabFrame(maxEdge = 640, quality = 0.7) {
-            const scale = maxEdge / Math.max(video.videoWidth, video.videoHeight);
-            const w = video.videoWidth * scale, h = video.videoHeight * scale;
-            const canvas = document.createElement('canvas');
-            canvas.width = w; canvas.height = h;
-            canvas.getContext('2d').drawImage(video, 0, 0, w, h);
-            return canvas.toDataURL('image/jpeg', quality);
-        }
-
-        function showGuidance(text) {
-            if (!text || !guidance) return;
-            lastSpoken = text;
-            guidance.textContent = text;
-            guidance.style.opacity = '1';
-        }
-
-        // Send a frame to /api/vision
-        async function analyzeFrame(question) {
-            if (!looping || visionBusy) return;
-            visionBusy = true;
-            setVisionState('ANALYZING', true);
-
-            try {
-                const frame = grabFrame();
-                const res = await fetch('/api/vision', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ image: frame, question: question || '' }),
-                });
-                const data = await res.json();
-                if (data.error) {
-                    showGuidance('⚠ ' + data.error);
-                } else {
-                    showGuidance(data.reply);
-                    // Speak the response
-                    try {
-                        const u = new SpeechSynthesisUtterance(data.reply);
-                        speechSynthesis.cancel();
-                        speechSynthesis.speak(u);
-                    } catch (e) { }
-                }
-            } catch (err) {
-                showGuidance('⚠ Network error — is the server running?');
-                console.error(err);
-            }
-            visionBusy = false;
-            setVisionState('WATCHING', true);
-        }
-
-        // Vision ask button
-        visionAskBtn.addEventListener('click', () => {
-            const q = visionQuestion.value.trim();
-            if (looping) analyzeFrame(q);
-            visionQuestion.value = '';
-        });
-        visionQuestion.addEventListener('keydown', (e) => {
-            if (e.key === 'Enter') {
-                e.preventDefault();
-                const q = visionQuestion.value.trim();
-                if (looping) analyzeFrame(q);
-                visionQuestion.value = '';
-            }
-        });
+        document.getElementById('startBtn').addEventListener('click', () => VisionAgent.start());
+        document.getElementById('stopBtn').addEventListener('click', () => VisionAgent.stop());
+        (function () {
+            const vq = document.getElementById('vision-question');
+            const ask = () => { VisionAgent.ask(vq.value.trim()); vq.value = ''; };
+            document.getElementById('vision-ask-btn').addEventListener('click', ask);
+            vq.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); ask(); } });
+        })();
 
         // ========== Init ==========
         showScreen('home');

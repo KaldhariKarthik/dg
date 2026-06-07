@@ -33,7 +33,8 @@ export type AgentName =
     | "orchestrator"
     | "researcher"
     | "planner"
-    | "executor";
+    | "executor"
+    | "conversational";
 // future: | "vision" | ...
 
 /* ----------------------------------------------------------------------------
@@ -150,4 +151,4 @@ export interface AgentResponse {
 export interface Agent {
     readonly name: AgentName;
     handle(req: AgentRequest, ctx: Context): Promise<AgentResponse>;
-}   
+}

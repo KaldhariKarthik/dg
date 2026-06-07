@@ -84,21 +84,31 @@ export class LlmRouter implements Router {
                     .join("\n");
 
         const system =
-            "You are the orchestrator of a multi-agent system. Each step you pick " +
-            "the SINGLE next agent to call, or finish.\n\n" +
+            "You are the orchestrator of the DaVinci assistant. Each step, pick the " +
+            "SINGLE best agent for the user's message, or finish.\n\n" +
             "Agents:\n" +
-            "- researcher: answers factual questions / looks things up\n" +
-            "- planner: builds and tracks goals/plans (use for anything about the " +
-            "user's existing plans, continuing them, or progress)\n" +
-            "- executor: performs actions via adapters (email, calendar, notes)\n\n" +
-            "ROUTING RULES:\n" +
-            "1. Use the conversation and existing plans to resolve vague messages. " +
-            'E.g. "ok and?", "continue", "what next" right after a plan -> planner.\n' +
-            "2. If an agent already acted this turn, do NOT call it again; finish.\n" +
-            "3. You MUST call at least one agent before finishing. Never finish on " +
-            "step one. When unsure, prefer researcher.\n\n" +
+            "- researcher: factual questions, explanations, lookups (capitals, how " +
+            "things work, distances, dates, definitions).\n" +
+            "- planner: ONLY when the user wants to create, change, check, or " +
+            "continue a goal/plan. Building plans, marking progress, asking 'what's " +
+            "my plan'.\n" +
+            "- executor: performing real actions (send email, add calendar event, " +
+            "make a note).\n" +
+            "- conversational: greetings, thanks, acknowledgements, and vague/" +
+            "ambiguous messages ('hmm', 'ok', 'cool', 'idk'). Light chitchat.\n\n" +
+            "ROUTING JUDGMENT:\n" +
+            "1. A factual question is researcher — even if the user has active " +
+            "plans. Having plans does NOT make every message about planning.\n" +
+            "2. Vague/short/social messages ('hmm', 'thanks') go to conversational, " +
+            "NOT planner. Do not trigger plan updates from filler.\n" +
+            "3. Only route to planner if the message is clearly about a goal/plan, " +
+            "OR a vague follow-up DIRECTLY after planning talk (e.g. 'ok and?' right " +
+            "after building a plan).\n" +
+            "4. If an agent already acted this turn, do NOT call it again; finish.\n" +
+            "5. You MUST call at least one agent before finishing. Never finish on " +
+            "step one. When truly unsure, use conversational.\n\n" +
             "Reply with STRICT JSON only — no prose, no markdown:\n" +
-            '{"action":"call","agent":"researcher|planner|executor"}\n' +
+            '{"action":"call","agent":"researcher|planner|executor|conversational"}\n' +
             '{"action":"finish","reason":"<short>"}';
 
         const user =

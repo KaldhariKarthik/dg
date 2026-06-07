@@ -67,9 +67,12 @@ export class Orchestrator {
                 // very first step (e.g. an ambiguous "ok and"), force one agent call
                 // so the user always gets a real response.
                 if (soFar.length === 0) {
-                    const fallbackAgent = this.registry.available().includes("researcher")
-                        ? "researcher"
-                        : this.registry.available()[0];
+                    const avail = this.registry.available();
+                    const fallbackAgent = avail.includes("conversational")
+                        ? "conversational"
+                        : avail.includes("researcher")
+                            ? "researcher"
+                            : avail[0];
                     steps++;
                     const agent = this.registry.get(fallbackAgent);
                     const res = await agent.handle(req, ctx);

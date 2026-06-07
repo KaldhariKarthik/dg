@@ -31,6 +31,7 @@ import { Orchestrator } from "./agents/orchestrator";
 import { ResearcherAgent } from "./agents/researcher";
 import { PlannerAgent } from "./agents/planner";
 import { ExecutorAgent } from "./agents/executor";
+import { ConversationalAgent } from "./agents/conversational";
 import { GeminiProvider } from "./llm/gemini";
 import { FileStore } from "./store/fileStore";
 
@@ -60,12 +61,13 @@ const registry = new AgentRegistry();
 registry.register(new ResearcherAgent(gemini)); // real
 registry.register(new PlannerAgent(gemini)); // real
 registry.register(new ExecutorAgent()); // dummy (no LLM needed yet)
+registry.register(new ConversationalAgent(gemini)); // real
 
 // LlmRouter is the brain; KeywordRouter stays available as a fallback class.
 const router: Router = new LlmRouter(gemini);
 void KeywordRouter; // kept intentionally for future fallback wiring
 
-const orchestrator = new Orchestrator(registry, router, { maxSteps: 4 });
+const orchestrator = new Orchestrator(registry, router, { maxSteps: 8 });
 const store = new FileStore();
 
 // Raw Gemini client for the perception endpoint.

@@ -53,6 +53,16 @@ export class LlmRouter implements Router {
     constructor(private llm: LLMProvider) { }
 
     async decide(rc: RouteContext): Promise<RouteDecision> {
+        // Scenes always go to vision first — no LLM routing call needed (saves a
+        // round-trip on the high-frequency perception path). Once vision has acted
+        // this turn, the turn is done.
+        if (rc.input.kind === "scene" && rc.available.includes("vision")) {
+            if (rc.soFar.some((r) => r.from === "vision")) {
+                return { action: "finish", reason: "vision already responded" };
+            }
+            return { action: "call", agent: "vision" };
+        }
+
         const userText =
             rc.input.kind === "text"
                 ? rc.input.text

@@ -6,17 +6,23 @@
  * even start. Everything it did well now lives here.)
  *
  * Routes — exactly the shapes the website already speaks:
- *   POST /api/chat    { message, sessionId?, history? }        -> { reply }
- *   POST /api/vision  { image, tier?, task_context?, ... }     -> v1.0 envelope
+ *   POST /api/chat        { message, sessionId?, history? }    -> { reply }
+ *   POST /api/vision      { image, tier?, task_context?, ... } -> v1.0 envelope
+ *   POST /api/orchestrate { session_id?, observation }         -> directive
  *   static serving of public/
  *
- * /api/chat flows through the orchestrator (researcher/planner/executor routed
- * by Gemini) — the website doesn't notice, same request, same { reply }.
+ * /api/chat flows through the orchestrator (researcher/planner/executor/
+ * conversational routed by Gemini) — the website doesn't notice; same request,
+ * same { reply }.
  *
  * /api/vision is the PERCEPTION EDGE: one frame -> the structured v1.0
- * observation the client expects. It is pure description; it never decides what
- * to SAY. That observation is the seam where a real VisionAgent will later feed
- * the orchestrator as a SceneInput.
+ * observation the client expects. Pure description; it never decides what to
+ * SAY.
+ *
+ * /api/orchestrate is the VISION BRIDGE: it takes one of those observations,
+ * runs it through the SAME orchestrator as a SceneInput (which routes to the
+ * VisionAgent), and returns the directive the perception client speaks and acts
+ * on. This is where description becomes decision.
  */
 
 import "dotenv/config";
@@ -32,6 +38,7 @@ import { ResearcherAgent } from "./agents/researcher";
 import { PlannerAgent } from "./agents/planner";
 import { ExecutorAgent } from "./agents/executor";
 import { ConversationalAgent } from "./agents/conversational";
+import { VisionAgent } from "./agents/vision";
 import { GeminiProvider } from "./llm/gemini";
 import { FileStore } from "./store/fileStore";
 import { LastMessageSynthesizer, LlmSynthesizer, Synthesizer } from "./core/synthesizer";
@@ -63,6 +70,7 @@ registry.register(new ResearcherAgent(gemini)); // real
 registry.register(new PlannerAgent(gemini)); // real
 registry.register(new ExecutorAgent()); // dummy (no LLM needed yet)
 registry.register(new ConversationalAgent(gemini)); // real
+registry.register(new VisionAgent(gemini)); // real — scenes -> directives
 
 // LlmRouter is the brain; KeywordRouter stays available as a fallback class.
 const router: Router = new LlmRouter(gemini);
@@ -107,7 +115,14 @@ app.post("/api/chat", async (req: Request, res: Response) => {
         // history; if the client sends history and we have none stored yet,
         // adopt the client's as a starting point.
         type StoredTurn = {
-            role: "user" | "researcher" | "planner" | "executor" | "orchestrator";
+            role:
+            | "user"
+            | "researcher"
+            | "planner"
+            | "executor"
+            | "conversational"
+            | "vision"
+            | "orchestrator";
             message: string;
             at: string;
         };
@@ -277,6 +292,59 @@ app.post("/api/vision", async (req: Request, res: Response) => {
     } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         console.error("Vision error:", msg);
+        res.status(500).json({ error: msg });
+    }
+});
+
+// POST /api/orchestrate ------------------------------------------------------
+// The VISION BRIDGE. A structured observation -> the orchestrator -> a directive
+// the perception client speaks and acts on. Vision turns are kept OUT of the
+// chat conversation history so the transcript stays clean. The active watch_for
+// is persisted in this session's state (written by the VisionAgent via
+// stateDelta), so the SERVER is the source of truth across frames.
+app.post("/api/orchestrate", async (req: Request, res: Response) => {
+    try {
+        const { session_id, observation } = req.body as {
+            session_id?: string;
+            observation?: any;
+        };
+        if (!observation) {
+            return res.status(400).json({ error: "observation is required." });
+        }
+
+        const sid = session_id ?? "default";
+        const state = await store.load(sid);
+        const transcript = observation?.user_flags?.user_transcript || undefined;
+
+        const ctx: Context = {
+            sessionId: sid,
+            state,
+            history: [], // vision observations don't pollute the chat transcript
+            startedAt: new Date().toISOString(),
+        };
+
+        const agentReq: AgentRequest = {
+            contractVersion: CONTRACT_VERSION,
+            input: { kind: "scene", scene: observation, text: transcript },
+        };
+
+        const result = await orchestrator.run(agentReq, ctx);
+
+        // Persist whatever vision wrote (e.g. the active watch_for) for next frame.
+        await store.save(sid, ctx.state);
+
+        // Map the orchestrator result down to the perception client's directive.
+        // The VisionAgent's structured payload rides in result.data.result.
+        const directive = ((result.data as any) || {}).result || {};
+        res.json({
+            guidance: result.message || "",
+            watch_for: directive.watch_for ?? null,
+            done: !!directive.done,
+            done_message: directive.done_message || "",
+        });
+    } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        console.error("Orchestrate error:", msg);
         res.status(500).json({ error: msg });
     }
 });

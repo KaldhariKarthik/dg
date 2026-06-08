@@ -5,8 +5,8 @@
  *
  *  This file is the single most important file in the project.
  *
- *  Everything else (orchestrator, researcher, planner, executor, future vision
- *  agent, the model provider, the adapters) is REPLACEABLE. This file is not.
+ *  Everything else (orchestrator, researcher, planner, executor, vision agent,
+ *  the model provider, the adapters) is REPLACEABLE. This file is not.
  *
  *  The rule:
  *    - Editing an agent's internal logic        -> fine, do it daily.
@@ -25,17 +25,17 @@ export const CONTRACT_VERSION = "1.0" as const;
 
 /* ----------------------------------------------------------------------------
  *  WHO can be an agent.
- *  Adding a new agent later (e.g. "vision") = add one entry here, write one
- *  file that implements `Agent`. Nothing else changes. That is horizontal
- *  growth being cheap.
+ *  Adding a new agent = add one entry here, write one file that implements
+ *  `Agent`. Nothing else changes. That is horizontal growth being cheap.
+ *  ("vision" was that one-entry addition — it turns scene input into a directive.)
  * ------------------------------------------------------------------------- */
 export type AgentName =
     | "orchestrator"
     | "researcher"
     | "planner"
     | "executor"
-    | "conversational";
-// future: | "vision" | ...
+    | "conversational"
+    | "vision";
 
 /* ----------------------------------------------------------------------------
  *  INPUT — what the user/orchestrator hands to an agent.
@@ -73,15 +73,17 @@ export type AgentInput = TextInput | SceneInput;
  *
  *  This rides alongside every request. Session id ties a conversation
  *  together; `state` is the persisted bag the planner reads/writes to track
- *  progress across requests. `history` is prior turns the orchestrator chooses
- *  to expose. Kept small on purpose.
+ *  progress across requests (and where the vision agent persists watch_for).
+ *  `history` is prior turns the orchestrator chooses to expose. Kept small on
+ *  purpose.
  * ------------------------------------------------------------------------- */
 export interface Context {
     sessionId: string;
     /**
-     * Persisted session state. The planner writes progress here; any agent may
-     * read it. Loaded from the Store before a request, saved after. Treated as
-     * an opaque bag so agents can store what they need without a schema change.
+     * Persisted session state. The planner writes progress here; the vision
+     * agent writes its active watch_for here; any agent may read it. Loaded from
+     * the Store before a request, saved after. Treated as an opaque bag so
+     * agents can store what they need without a schema change.
      */
     state: Record<string, unknown>;
     /** Prior turns, oldest first, that the orchestrator decided to surface. */
@@ -112,16 +114,18 @@ export interface AgentRequest {
  *
  *    message    : human-readable text. The only part the user ever sees.
  *    data       : optional structured payload (research findings, a plan
- *                 object, an executor's action results). Internal/for other
- *                 agents. Opaque on purpose.
+ *                 object, an executor's action results, the vision agent's
+ *                 directive). Internal/for other agents. Opaque on purpose.
  *    stateDelta : optional changes to persist into Context.state (e.g. the
- *                 planner updating progress). Merged into state after the turn.
+ *                 planner updating progress, vision updating watch_for). Merged
+ *                 into state after the turn.
  *    status     : did this agent succeed, partially succeed, or fail.
  *    diagnostics: optional non-fatal notes (warnings, what was skipped).
  *
  *  An agent that only wants to answer text just sets `message` + `status`.
  *  Everything else is optional, so simple agents stay simple while complex
- *  ones (executor, planner) have room to grow — without a contract change.
+ *  ones (executor, planner, vision) have room to grow — without a contract
+ *  change.
  * ------------------------------------------------------------------------- */
 export type AgentStatus = "ok" | "partial" | "error";
 
@@ -143,10 +147,10 @@ export interface AgentResponse {
 /* ----------------------------------------------------------------------------
  *  THE AGENT INTERFACE — the socket itself.
  *
- *  Researcher, Planner, Executor, the future Vision agent, AND the
- *  Orchestrator all implement this one interface. The orchestrator doesn't
- *  know what's inside any of them — it only knows: hand it a request, get a
- *  response. That uniformity is the whole game.
+ *  Researcher, Planner, Executor, Conversational, Vision, AND the Orchestrator
+ *  all implement this one interface. The orchestrator doesn't know what's
+ *  inside any of them — it only knows: hand it a request, get a response. That
+ *  uniformity is the whole game.
  * ------------------------------------------------------------------------- */
 export interface Agent {
     readonly name: AgentName;

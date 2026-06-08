@@ -8,7 +8,7 @@
  *   2. if finish -> assemble final answer, return.
  *   3. else dispatch to that agent via the registry.
  *   4. fold the agent's stateDelta into Context.state (so the planner's
- *      progress persists into the next step).
+ *      progress — and the vision agent's watch_for — persist into the next step).
  *   5. record the turn, repeat.
  *
  * THE SEATBELT: maxSteps. No matter what the router says, the loop cannot run
@@ -121,10 +121,14 @@ export class Orchestrator {
     /**
      * Fold the agents' outputs into one user-facing response.
      *
-     * The human-readable `message` now comes from the Synthesizer (single hop ->
+     * The human-readable `message` comes from the Synthesizer (single hop ->
      * verbatim; multiple hops -> fused into DaVinci's voice). Status and the
-     * `data.steps` debug trace are computed here as before. Persistence already
-     * happened in the loop via stateDelta, so synthesis touches only the words.
+     * `data.steps` debug trace are computed here. We ALSO carry the last agent's
+     * own `data` through as `data.result`, so structured directives survive
+     * assembly (the vision bridge reads `data.result` to get watch_for/done).
+     * Chat ignores `data` entirely — it only reads `message` — so this is
+     * backward-compatible. Persistence already happened in the loop via
+     * stateDelta; synthesis touches only the words.
      */
     private async assemble(
         req: AgentRequest,
@@ -152,12 +156,17 @@ export class Orchestrator {
             soFar,
         });
 
+        const last = soFar[soFar.length - 1];
+
         return {
             contractVersion: CONTRACT_VERSION,
             from: this.name,
             status: worstStatus,
             message,
-            data: { steps: soFar.map((r) => ({ from: r.from, status: r.status })) },
+            data: {
+                steps: soFar.map((r) => ({ from: r.from, status: r.status })),
+                result: last.data,
+            },
             diagnostics: [`stopReason: ${stopReason}`],
         };
     }

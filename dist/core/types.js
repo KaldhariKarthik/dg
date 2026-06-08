@@ -6,8 +6,8 @@
  *
  *  This file is the single most important file in the project.
  *
- *  Everything else (orchestrator, researcher, planner, executor, future vision
- *  agent, the model provider, the adapters) is REPLACEABLE. This file is not.
+ *  Everything else (orchestrator, researcher, planner, executor, vision agent,
+ *  the model provider, the adapters) is REPLACEABLE. This file is not.
  *
  *  The rule:
  *    - Editing an agent's internal logic        -> fine, do it daily.

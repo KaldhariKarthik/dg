@@ -914,7 +914,16 @@
             stopEl: document.getElementById('stopBtn'),
             sessionId: 'sess_' + Math.random().toString(36).slice(2, 8),
             taskContext: { task: null, mode: 'coach' },
-            orchestrate: null, // set to your /api/orchestrate fetch wrapper when it exists
+            // The vision bridge: forward each observation to the orchestrator and
+            // return the directive (guidance / watch_for / done) for the client to act on.
+            orchestrate: async (observation, snapshot) => {
+                const r = await fetch('/api/orchestrate', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ session_id: snapshot.sessionId, observation }),
+                });
+                return r.ok ? r.json() : null;
+            },
         });
         document.getElementById('startBtn').addEventListener('click', () => VisionAgent.start());
         document.getElementById('stopBtn').addEventListener('click', () => VisionAgent.stop());

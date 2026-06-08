@@ -13,12 +13,13 @@
  *    - Editing the shapes in THIS file          -> rare, deliberate, versioned.
  *
  *  CONTRACT_VERSION 1.1 (multi-user): Context.sessionId -> Context.userId.
- *  Identity is now the authenticated Google `sub`, resolved server-side from a
- *  session cookie, never sent by the client. This was a deliberate migration.
+ *  CONTRACT_VERSION 1.2 (memory): added MemoryData + optional Context.memory,
+ *  the per-user profile the orchestrator loads each turn so agents can READ
+ *  what's been learned about the user (additive; existing agents unaffected).
  * ============================================================================
  */
 
-export const CONTRACT_VERSION = "1.1" as const;
+export const CONTRACT_VERSION = "1.2" as const;
 
 /* ----------------------------------------------------------------------------
  *  WHO can be an agent.
@@ -53,6 +54,23 @@ export interface SceneInput {
 export type AgentInput = TextInput | SceneInput;
 
 /* ----------------------------------------------------------------------------
+ *  MEMORY — the per-user long-term profile.
+ *
+ *  Lives in the contract because it crosses module boundaries: the MemoryStore
+ *  persists it, the orchestrator loads it onto Context each turn, and agents
+ *  read it. It is CONTEXT, not command — an agent weighs it when relevant and
+ *  never lets a remembered fact override an explicit current request.
+ * ------------------------------------------------------------------------- */
+export interface MemoryData {
+    /** key -> value, e.g. { "trip_style": "short and low-effort" }. */
+    preferences: Record<string, string>;
+    /** recurring habits, e.g. "tends to trim plans down when they feel heavy". */
+    past_patterns: string[];
+    /** durable facts, e.g. "lives in Hyderabad". */
+    long_term_facts: string[];
+}
+
+/* ----------------------------------------------------------------------------
  *  CONTEXT — everything an agent needs that isn't the input itself.
  *
  *  `userId` is the authenticated user (Google sub). It ties a conversation
@@ -71,6 +89,12 @@ export interface Context {
     state: Record<string, unknown>;
     /** Prior turns, oldest first, that the orchestrator decided to surface. */
     history: Turn[];
+    /**
+     * The user's long-term memory profile, loaded by the orchestrator at the
+     * start of a turn. Read-only for agents. Optional so a Context built without
+     * it (or by older code) still type-checks.
+     */
+    memory?: MemoryData;
     /** When this request started — useful for timeouts/tracing later. */
     startedAt: string; // ISO timestamp
 }

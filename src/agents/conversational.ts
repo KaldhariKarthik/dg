@@ -2,13 +2,9 @@
  * src/agents/conversational.ts
  *
  * REAL agent. Handles chitchat, greetings, acknowledgements, and vague input
- * ("hmm", "ok", "thanks", "cool"). Its job is to keep the conversation natural
- * WITHOUT dumping plans or over-explaining. If the user seems to be mulling a
- * decision, it can ask ONE short clarifying question.
- *
- * This agent exists so vague messages stop leaking into the planner. Adding it
- * was a one-file change plus one registration line — the orchestrator and
- * contract didn't move.
+ * ("hmm", "ok", "thanks", "cool"). Keeps the conversation natural WITHOUT
+ * dumping plans or over-explaining. Now lightly MEMORY-AWARE: it may reflect a
+ * known preference in passing, but memory is context, never a script.
  */
 
 import {
@@ -19,6 +15,23 @@ import {
     CONTRACT_VERSION,
 } from "../core/types";
 import { LLMProvider, LLMMessage } from "../llm/provider";
+
+/** Compact, optional memory context for light personalization. */
+function memoryNote(ctx: Context): string {
+    const m = ctx.memory;
+    if (!m) return "";
+    const has =
+        Object.keys(m.preferences).length || m.past_patterns.length || m.long_term_facts.length;
+    if (!has) return "";
+    const prefs =
+        Object.entries(m.preferences).map(([k, v]) => `${k}: ${v}`).join("; ") || "none";
+    return (
+        "\n- For light context only (do NOT recite, do NOT force into the reply), " +
+        `you know: preferences [${prefs}]; ` +
+        `patterns [${m.past_patterns.join("; ") || "none"}]; ` +
+        `facts [${m.long_term_facts.join("; ") || "none"}].`
+    );
+}
 
 export class ConversationalAgent implements Agent {
     readonly name = "conversational" as const;
@@ -47,7 +60,8 @@ export class ConversationalAgent implements Agent {
             (planGoals.length
                 ? `- For context only (do not recite unless asked), the user has these ` +
                 `active goals: ${planGoals.join("; ")}.`
-                : "");
+                : "") +
+            memoryNote(ctx);
 
         const recent: LLMMessage[] = ctx.history.slice(-6).map((t) => ({
             role: t.role === "user" ? "user" : "model",

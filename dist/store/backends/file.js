@@ -222,6 +222,13 @@ class FileMemoryStore {
         store[userId] = memory;
         await writeJson(this.file, store);
     }
+    async mergeMemory(userId, delta) {
+        const store = await this.all();
+        const merged = (0, memoryStore_1.applyMemoryDelta)(store[userId] ?? (0, memoryStore_1.emptyMemory)(), delta);
+        store[userId] = merged;
+        await writeJson(this.file, store);
+        return merged;
+    }
 }
 exports.FileMemoryStore = FileMemoryStore;
 //# sourceMappingURL=file.js.map

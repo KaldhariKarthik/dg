@@ -189,6 +189,18 @@ app.get("/api/me", requireAuth, async (req: Request, res: Response) => {
     });
 });
 
+// GET /api/memory — the current user's long-term memory profile.
+app.get("/api/memory", requireAuth, async (req: Request, res: Response) => {
+    try {
+        const mem = await memoryStore.loadMemory(req.userId!);
+        res.json(mem);
+    } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        console.error("Memory error:", msg);
+        res.status(500).json({ error: msg });
+    }
+});
+
 /* ============================ APP ROUTES ============================== */
 
 // POST /api/chat -------------------------------------------------------------

@@ -13,7 +13,7 @@
 
 import * as admin from "firebase-admin";
 import { Store } from "../store";
-import { MemoryStore, MemoryData, emptyMemory } from "../memoryStore";
+import { MemoryStore, MemoryData, emptyMemory, applyMemoryDelta } from "../memoryStore";
 import { newSessionId } from "../ids";
 import { UserStore, SessionStore, UpsertUserInput } from "../../auth/stores";
 import { User, Session, GoogleCredential, IntegrationCredential } from "../../auth/types";
@@ -175,7 +175,7 @@ export class FirestoreWorkingStore implements Store {
 
 export class FirestoreMemoryStore implements MemoryStore {
     private col: admin.firestore.CollectionReference;
-    constructor(db: admin.firestore.Firestore) {
+    constructor(private db: admin.firestore.Firestore) {
         this.col = db.collection("memory");
     }
 
@@ -192,5 +192,21 @@ export class FirestoreMemoryStore implements MemoryStore {
 
     async saveMemory(userId: string, memory: MemoryData): Promise<void> {
         await this.col.doc(userId).set(memory);
+    }
+
+    async mergeMemory(userId: string, delta: MemoryData): Promise<MemoryData> {
+        const ref = this.col.doc(userId);
+        return this.db.runTransaction(async (t) => {
+            const snap = await t.get(ref);
+            const d = snap.exists ? (snap.data() ?? {}) : {};
+            const current: MemoryData = {
+                preferences: (d.preferences as Record<string, string>) ?? {},
+                past_patterns: Array.isArray(d.past_patterns) ? d.past_patterns : [],
+                long_term_facts: Array.isArray(d.long_term_facts) ? d.long_term_facts : [],
+            };
+            const merged = applyMemoryDelta(current, delta);
+            t.set(ref, merged);
+            return merged;
+        });
     }
 }

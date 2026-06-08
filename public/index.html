@@ -641,7 +641,18 @@
             <p class="font-body-md text-on-surface-variant">Your goals, habits, and the sources it can draw on — held on
                 your device.</p>
         </section>
-
+        <section class="glass-card bento-border rounded-bento p-4 mb-6 flex items-center justify-between">
+            <div class="flex items-center gap-3">
+                <span class="material-symbols-outlined text-primary">account_circle</span>
+                <div>
+                    <p class="font-status-dot text-status-dot text-on-surface-variant uppercase">Signed in as</p>
+                    <p id="signed-in-as" class="font-body-md text-on-surface">—</p>
+                </div>
+            </div>
+            <button onclick="signOut()"
+                class="px-4 py-2 rounded-xl bg-white/5 border border-white/10 text-on-surface-variant font-label-caps text-label-caps active:scale-95 transition-transform">Sign
+                out</button>
+        </section>
         <!-- Connected sources -->
         <section class="glass-card bento-border rounded-bento p-6 space-y-4 mb-6">
             <div class="flex justify-between items-end">
@@ -1049,17 +1060,26 @@
 
         // ========== Init ==========
         // ========== Auth gate ==========
+        let currentUser = null;
         async function bootstrap() {
             try {
                 const res = await fetch('/api/me');
                 if (!res.ok) throw new Error('unauthenticated');
-                const me = await res.json();
+                currentUser = await res.json();
                 document.getElementById('auth-gate').style.display = 'none';
+                renderIdentity();
                 showScreen('home');
-                // (optional) surface who's signed in / a sign-out control here using `me`
             } catch {
                 document.getElementById('auth-gate').style.display = 'flex';
             }
+        }
+        function renderIdentity() {
+            const el = document.getElementById('signed-in-as');
+            if (el && currentUser) el.textContent = currentUser.displayName || currentUser.email || 'Signed in';
+        }
+        async function signOut() {
+            try { await fetch('/api/auth/logout', { method: 'POST' }); } catch { }
+            location.reload();
         }
         bootstrap();
     </script>

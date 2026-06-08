@@ -8,18 +8,15 @@
  *   1. ask the Router: which agent next, or finish?
  *   2. if finish -> assemble final answer, return.
  *   3. else dispatch to that agent via the registry.
- *   4. fold the agent's stateDelta into Context.state (so the planner's
- *      progress — and the vision agent's watch_for — persist into the next step).
+ *   4. fold the agent's stateDelta into Context.state.
  *   5. record the turn, repeat.
  *
- * THE SEATBELT: maxSteps. No matter what the router says, the loop cannot run
- * more than maxSteps times. An LLM router could otherwise ping-pong forever.
- * Gemini decides DIRECTION; this cap enforces a LIMIT. Both, always.
+ * THE SEATBELT: maxSteps caps agent calls per turn no matter what the router says.
  *
- * THE TWO SOCKETS: the orchestrator imports neither concrete agents, nor the
- * concrete router, nor the concrete synthesizer — only interfaces + the
- * registry. The Router decides which agent acts; the Synthesizer decides what
- * the user finally hears. Swap either brain without editing this file.
+ * MEMORY (v1.2): at the start of a turn the orchestrator LOADS the user's memory
+ * onto ctx.memory so agents can READ it. After the turn it extracts any newly-
+ * learned items and merges them ATOMICALLY (mergeMemory) — no more read-modify-
+ * write race. Filler turns (conversational-only) are skipped entirely.
  */
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.Orchestrator = void 0;
@@ -40,15 +37,21 @@ class Orchestrator {
         this.memoryStore = memoryStore;
         this.opts = opts;
     }
-    /**
-     * Run one full turn: loop agents until the router finishes or the step cap
-     * is hit, then synthesize a single assembled response for the user.
-     */
     async run(req, ctx) {
         const maxSteps = this.opts.maxSteps ?? 8;
         const soFar = [];
         let steps = 0;
         let stopReason = "completed";
+        // Load the user's memory ONCE per turn so any agent can read ctx.memory.
+        // Non-fatal: if it fails, agents simply see no memory this turn.
+        try {
+            ctx.memory = await this.memoryStore.loadMemory(ctx.userId);
+        }
+        catch (e) {
+            console.error("[memory] load failed (continuing without):", e);
+        }
+        // Does any agent hold an open interaction that this turn belongs to?
+        // The router acts on this NAME without knowing the agent's internals.
         const claimedBy = await this.registry.resolveClaim(req.input, ctx);
         while (steps < maxSteps) {
             const decision = await this.router.decide({
@@ -59,11 +62,8 @@ class Orchestrator {
                 claimedBy,
             });
             if (decision.action === "finish") {
-                // Guard: never finish having done nothing. If the router bails on the
-                // very first step (e.g. an ambiguous "ok and"), force one agent call
-                // so the user always gets a real response. Prefer the conversational
-                // agent here — a no-work turn is usually filler, and it should NOT
-                // leak into the researcher (or planner).
+                // Guard: never finish having done nothing. Force one conversational
+                // hop so the user always gets a real response.
                 if (soFar.length === 0) {
                     const avail = this.registry.available();
                     const fallbackAgent = avail.includes("conversational")
@@ -106,87 +106,100 @@ class Orchestrator {
             stopReason = `step cap reached (${maxSteps})`;
         }
         const response = await this.assemble(req, soFar, stopReason);
-        // Run memory extraction in the background (asynchronous/non-blocking)
-        this.updateMemory(ctx).catch(err => console.error("[memory] Background update failed:", err));
+        // Extract + merge memory in the background (non-blocking).
+        this.updateMemory(ctx, soFar).catch((err) => console.error("[memory] Background update failed:", err));
         return response;
     }
-    /** Extract insights from conversation turns and update memory profile. */
-    async updateMemory(ctx) {
+    /**
+     * Extract NEW durable items from the turn and merge them atomically. Skips
+     * filler turns and no-op deltas so memory stays meaningful and cheap.
+     */
+    async updateMemory(ctx, soFar) {
         try {
-            console.log("[memory] Starting background memory extraction...");
-            const memory = await this.memoryStore.loadMemory("ctx.userId");
-            // Get last 6 turns of history for extraction
+            // Filler skip: a conversational-only turn (greetings, "hmm", thanks)
+            // carries nothing worth remembering.
+            if (soFar.length > 0 && soFar.every((r) => r.from === "conversational")) {
+                return;
+            }
             const recentHistory = ctx.history.slice(-6);
             if (recentHistory.length === 0)
                 return;
-            const conversationText = recentHistory.map(t => `${t.role}: ${t.message}`).join("\n");
-            const system = "You are a memory extractor. Analyze the conversation history and update the user's memory profile.\n" +
-                "Only extract information that is explicitly stated or strongly implied by the user.\n" +
-                "Do not invent preferences, facts, or habits.\n" +
-                "Return a strict JSON object matching this schema:\n" +
+            const conversationText = recentHistory
+                .map((t) => `${t.role}: ${t.message}`)
+                .join("\n");
+            const current = ctx.memory ?? (await this.memoryStore.loadMemory(ctx.userId));
+            const system = "You extract NEW, durable facts about the user from a conversation, " +
+                "to update their long-term memory. Extract ONLY what the user " +
+                "explicitly stated or clearly implied about THEMSELVES. Never invent. " +
+                "Ignore one-off task details (a single date, a single question). " +
+                "Capture stable preferences, recurring habits, and lasting facts.\n" +
+                "Return STRICT JSON only, no markdown — ONLY items that are NEW " +
+                "relative to the current profile:\n" +
                 "{\n" +
-                "  \"preferences\": [\"key:value\", ...],\n" +
-                "  \"past_patterns\": [\"recurring habit description\", ...],\n" +
-                "  \"long_term_facts\": [\"long term fact description\", ...]\n" +
-                "}";
-            const user = `Current Memory Profile:\n${JSON.stringify(memory, null, 2)}\n\n` +
-                `Recent Conversation:\n${conversationText}\n\n` +
-                `Extract any new preferences, past patterns, or long-term facts, and output the updated entries as JSON.`;
+                '  "preferences": ["key:value", ...],\n' +
+                '  "past_patterns": ["recurring habit", ...],\n' +
+                '  "long_term_facts": ["durable fact", ...]\n' +
+                "}\n" +
+                "Use empty arrays if there is nothing new.";
+            const user = `Current profile:\n${JSON.stringify(current, null, 2)}\n\n` +
+                `Recent conversation:\n${conversationText}\n\n` +
+                `Output ONLY new items as JSON.`;
             const raw = await this.llm.complete([
                 { role: "system", content: system },
-                { role: "user", content: user }
+                { role: "user", content: user },
             ], { temperature: 0.1 });
-            // Parse response
-            const cleaned = raw.replace(/```json|```/g, "").trim();
-            const start = cleaned.indexOf("{");
-            const end = cleaned.lastIndexOf("}");
-            if (start === -1 || end === -1 || end < start)
+            const delta = this.parseMemoryDelta(raw);
+            if (!delta)
                 return;
-            const parsed = JSON.parse(cleaned.slice(start, end + 1));
-            // Merge preferences
-            if (Array.isArray(parsed.preferences)) {
-                for (const pref of parsed.preferences) {
-                    if (typeof pref === "string" && pref.includes(":")) {
-                        const [k, v] = pref.split(":", 2);
-                        memory.preferences[k.trim()] = v.trim();
-                    }
-                }
-            }
-            // Merge patterns
-            if (Array.isArray(parsed.past_patterns)) {
-                for (const pattern of parsed.past_patterns) {
-                    if (typeof pattern === "string" && !memory.past_patterns.includes(pattern)) {
-                        memory.past_patterns.push(pattern);
-                    }
-                }
-            }
-            // Merge facts
-            if (Array.isArray(parsed.long_term_facts)) {
-                for (const fact of parsed.long_term_facts) {
-                    if (typeof fact === "string" && !memory.long_term_facts.includes(fact)) {
-                        memory.long_term_facts.push(fact);
-                    }
-                }
-            }
-            await this.memoryStore.saveMemory("ctx.userId", memory);
-            console.log("[memory] ✅ Memory updated successfully in Firestore/local.");
+            const empty = Object.keys(delta.preferences).length === 0 &&
+                delta.past_patterns.length === 0 &&
+                delta.long_term_facts.length === 0;
+            if (empty)
+                return;
+            await this.memoryStore.mergeMemory(ctx.userId, delta);
+            console.log("[memory] merged new items into profile.");
         }
         catch (e) {
-            console.error("[memory] Failed to update memory:", e);
+            console.error("[memory] update failed:", e);
         }
     }
-    /**
-     * Fold the agents' outputs into one user-facing response.
-     *
-     * The human-readable `message` comes from the Synthesizer (single hop ->
-     * verbatim; multiple hops -> fused into DaVinci's voice). Status and the
-     * `data.steps` debug trace are computed here. We ALSO carry the last agent's
-     * own `data` through as `data.result`, so structured directives survive
-     * assembly (the vision bridge reads `data.result` to get watch_for/done).
-     * Chat ignores `data` entirely — it only reads `message` — so this is
-     * backward-compatible. Persistence already happened in the loop via
-     * stateDelta; synthesis touches only the words.
-     */
+    /** Parse the extractor's JSON into a MemoryData delta. Tolerant of fences. */
+    parseMemoryDelta(raw) {
+        const cleaned = raw.replace(/```json|```/g, "").trim();
+        const start = cleaned.indexOf("{");
+        const end = cleaned.lastIndexOf("}");
+        if (start === -1 || end === -1 || end < start)
+            return null;
+        let parsed;
+        try {
+            parsed = JSON.parse(cleaned.slice(start, end + 1));
+        }
+        catch {
+            return null;
+        }
+        if (typeof parsed !== "object" || parsed === null)
+            return null;
+        const preferences = {};
+        if (Array.isArray(parsed.preferences)) {
+            for (const pref of parsed.preferences) {
+                // Split on the FIRST colon only, so values may contain colons.
+                if (typeof pref === "string" && pref.includes(":")) {
+                    const i = pref.indexOf(":");
+                    const k = pref.slice(0, i).trim();
+                    const v = pref.slice(i + 1).trim();
+                    if (k && v)
+                        preferences[k] = v;
+                }
+            }
+        }
+        const past_patterns = Array.isArray(parsed.past_patterns)
+            ? parsed.past_patterns.filter((x) => typeof x === "string")
+            : [];
+        const long_term_facts = Array.isArray(parsed.long_term_facts)
+            ? parsed.long_term_facts.filter((x) => typeof x === "string")
+            : [];
+        return { preferences, past_patterns, long_term_facts };
+    }
     async assemble(req, soFar, stopReason) {
         if (soFar.length === 0) {
             return {

@@ -2,21 +2,36 @@
 /**
  * src/agents/planner.ts
  *
- * REAL agent. The one with MEMORY, now DATE-AWARE and not rigid.
+ * REAL agent. DATE-AWARE, and now MEMORY-AWARE.
  *
  * Plans are structured objects in ctx.state.plans (persisted by the Store).
- * The planner reads existing plans + recent conversation, decides
- * create/update/report, and writes the updated set back via stateDelta.
+ * The planner reads existing plans + recent conversation + the user's long-term
+ * memory, decides create/update/report, and writes the updated set back via
+ * stateDelta.
  *
- * Design fixes from earlier:
- *  - It knows TODAY'S DATE, so "this month" / "23 days" map to real dates.
- *  - It chooses the NATURAL breakdown for the timeframe (no forced weeks).
- *  - It replies about the RELEVANT plan only (mentions others briefly if it
- *    actually matters), instead of dumping every plan every time.
+ * Memory use (v1.2): the planner may bias plans toward known preferences/
+ * patterns (e.g. a habit of trimming plans down -> lean simpler) — but memory is
+ * CONTEXT, never a command. An explicit request ("plan a 2-week trip") always
+ * wins over a remembered "prefers short trips".
  */
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.PlannerAgent = void 0;
 const types_1 = require("../core/types");
+/** Format the user's memory as optional prompt context, with a guardrail. */
+function memoryNote(ctx) {
+    const m = ctx.memory;
+    if (!m)
+        return "";
+    const has = Object.keys(m.preferences).length || m.past_patterns.length || m.long_term_facts.length;
+    if (!has)
+        return "";
+    const prefs = Object.entries(m.preferences).map(([k, v]) => `${k}: ${v}`).join("; ") || "none";
+    return (`\n\nWhat you've learned about this user (CONTEXT, not commands — use only ` +
+        `when relevant, and NEVER override an explicit current request):\n` +
+        `- Preferences: ${prefs}\n` +
+        `- Patterns: ${m.past_patterns.join("; ") || "none"}\n` +
+        `- Facts: ${m.long_term_facts.join("; ") || "none"}`);
+}
 class PlannerAgent {
     llm;
     name = "planner";
@@ -44,17 +59,14 @@ class PlannerAgent {
             "timeframes.\n\n" +
             "TIMEFRAME — be sensible, NOT rigid:\n" +
             "- Compute the target end date from today's date and the user's " +
-            "timeframe (e.g. '23 days' = today + 23 days; 'this month' = end of the " +
-            "current month).\n" +
-            "- Break the plan into whatever chunks NATURALLY fit that duration. " +
-            "Do NOT force weeks. 23 days might be 3 phases of ~8 days, or milestone-" +
-            "based. A weekend goal might be hours. Use your judgment and label each " +
-            "phase honestly (e.g. 'Days 1-8', 'By June 15').\n" +
+            "timeframe.\n" +
+            "- Break the plan into whatever chunks NATURALLY fit that duration. Do " +
+            "NOT force weeks. Use your judgment and label each phase honestly.\n" +
             "- Steps must be specific and progressive, sized to the real timeframe.\n\n" +
             "RESPONSE SCOPE:\n" +
             "- Reply about the plan the user is actually discussing. Do NOT recite " +
             "every plan. You MAY briefly mention another plan only if it's genuinely " +
-            "relevant (e.g. scheduling conflict).\n\n" +
+            "relevant (e.g. a scheduling conflict).\n\n" +
             "MEMORY:\n" +
             "- You get all current plans as JSON. Keep them all unless the user " +
             "abandons one. Preserve ids/createdAt. Mark steps done to track progress.\n\n" +
@@ -69,8 +81,9 @@ class PlannerAgent {
             "}";
         const user = `Today is ${human} (${nowIso}).\n\n` +
             `Recent conversation:\n${convo}\n\n` +
-            `Current plans (JSON):\n${JSON.stringify(existingPlans, null, 2)}\n\n` +
-            `User message: ${userText}\n\n` +
+            `Current plans (JSON):\n${JSON.stringify(existingPlans, null, 2)}` +
+            memoryNote(ctx) +
+            `\n\nUser message: ${userText}\n\n` +
             `If the message is a vague follow-up ("ok and", "continue", "what ` +
             `next"), interpret it using the conversation + plans — usually it means ` +
             `continue/expand the most recently discussed plan.\n` +

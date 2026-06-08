@@ -16,7 +16,7 @@
 import { promises as fs } from "fs";
 import * as path from "path";
 import { Store } from "../store";
-import { MemoryStore, MemoryData, emptyMemory } from "../memoryStore";
+import { MemoryStore, MemoryData, emptyMemory, applyMemoryDelta } from "../memoryStore";
 import { newSessionId } from "../ids";
 import { UserStore, SessionStore, UpsertUserInput } from "../../auth/stores";
 import { User, Session, GoogleCredential, IntegrationCredential } from "../../auth/types";
@@ -205,5 +205,13 @@ export class FileMemoryStore implements MemoryStore {
         const store = await this.all();
         store[userId] = memory;
         await writeJson(this.file, store);
+    }
+
+    async mergeMemory(userId: string, delta: MemoryData): Promise<MemoryData> {
+        const store = await this.all();
+        const merged = applyMemoryDelta(store[userId] ?? emptyMemory(), delta);
+        store[userId] = merged;
+        await writeJson(this.file, store);
+        return merged;
     }
 }

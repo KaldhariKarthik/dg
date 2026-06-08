@@ -158,8 +158,10 @@ class FirestoreWorkingStore {
 exports.FirestoreWorkingStore = FirestoreWorkingStore;
 /* ---------------------------------- MEMORY ----------------------------------- */
 class FirestoreMemoryStore {
+    db;
     col;
     constructor(db) {
+        this.db = db;
         this.col = db.collection("memory");
     }
     async loadMemory(userId) {
@@ -175,6 +177,21 @@ class FirestoreMemoryStore {
     }
     async saveMemory(userId, memory) {
         await this.col.doc(userId).set(memory);
+    }
+    async mergeMemory(userId, delta) {
+        const ref = this.col.doc(userId);
+        return this.db.runTransaction(async (t) => {
+            const snap = await t.get(ref);
+            const d = snap.exists ? (snap.data() ?? {}) : {};
+            const current = {
+                preferences: d.preferences ?? {},
+                past_patterns: Array.isArray(d.past_patterns) ? d.past_patterns : [],
+                long_term_facts: Array.isArray(d.long_term_facts) ? d.long_term_facts : [],
+            };
+            const merged = (0, memoryStore_1.applyMemoryDelta)(current, delta);
+            t.set(ref, merged);
+            return merged;
+        });
     }
 }
 exports.FirestoreMemoryStore = FirestoreMemoryStore;

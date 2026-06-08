@@ -14,11 +14,12 @@
  *    - Editing the shapes in THIS file          -> rare, deliberate, versioned.
  *
  *  CONTRACT_VERSION 1.1 (multi-user): Context.sessionId -> Context.userId.
- *  Identity is now the authenticated Google `sub`, resolved server-side from a
- *  session cookie, never sent by the client. This was a deliberate migration.
+ *  CONTRACT_VERSION 1.2 (memory): added MemoryData + optional Context.memory,
+ *  the per-user profile the orchestrator loads each turn so agents can READ
+ *  what's been learned about the user (additive; existing agents unaffected).
  * ============================================================================
  */
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.CONTRACT_VERSION = void 0;
-exports.CONTRACT_VERSION = "1.1";
+exports.CONTRACT_VERSION = "1.2";
 //# sourceMappingURL=types.js.map

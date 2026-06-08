@@ -68,6 +68,38 @@ export class LlmRouter implements Router {
                 ? rc.input.text
                 : `[vision scene] ${rc.input.text ?? ""}`;
 
+        // HARD OVERRIDE: if the executor has a draft open (email, event, or an
+        // event-edit awaiting confirmation), a follow-up belongs to the executor.
+        const draftOpen =
+            (rc.ctx.state.emailDraft != null &&
+                typeof rc.ctx.state.emailDraft === "object") ||
+            (rc.ctx.state.eventDraft != null &&
+                typeof rc.ctx.state.eventDraft === "object") ||
+            (rc.ctx.state.eventEdit != null &&
+                typeof rc.ctx.state.eventEdit === "object");
+
+        // SOFT OVERRIDE: if we just created an event (lastEvent in memory) and
+        // the message looks like a tweak to it ("also invite X", "move it",
+        // "rename it"), send it to the executor so it can edit that event.
+        const lastEventExists =
+            rc.ctx.state.lastEvent != null &&
+            typeof rc.ctx.state.lastEvent === "object";
+        const text =
+            rc.input.kind === "text" ? rc.input.text.toLowerCase() : "";
+        const looksLikeEventEdit =
+            lastEventExists &&
+            /\b(also|too|as well|invite|add|remove|change|move|reschedule|rename|update|push it|shift|it|that meeting|this meeting|the meeting|the event)\b/.test(
+                text
+            );
+
+        if (
+            (draftOpen || looksLikeEventEdit) &&
+            rc.available.includes("executor") &&
+            !rc.soFar.some((r) => r.from === "executor")
+        ) {
+            return { action: "call", agent: "executor" };
+        }
+
         // Recent conversation, so ambiguous follow-ups ("ok and", "what about it")
         // can be routed using what was just discussed.
         const convo =
@@ -117,6 +149,17 @@ export class LlmRouter implements Router {
             "4. If an agent already acted this turn, do NOT call it again; finish.\n" +
             "5. You MUST call at least one agent before finishing. Never finish on " +
             "step one. When truly unsure, use conversational.\n\n" +
+            "- researcher: answers factual questions / looks things up\n" +
+            "- planner: builds and tracks goals/plans (use for anything about the " +
+            "user's existing plans, continuing them, or progress)\n" +
+            "- executor: performs actions — sending email AND adding calendar " +
+            "events/meetings/reminders\n\n" +
+            "ROUTING RULES:\n" +
+            "1. Use the conversation and existing plans to resolve vague messages. " +
+            'E.g. "ok and?", "continue", "what next" right after a plan -> planner.\n' +
+            "2. If an agent already acted this turn, do NOT call it again; finish.\n" +
+            "3. You MUST call at least one agent before finishing. Never finish on " +
+            "step one. When unsure, prefer researcher.\n\n" +
             "Reply with STRICT JSON only — no prose, no markdown:\n" +
             '{"action":"call","agent":"researcher|planner|executor|conversational"}\n' +
             '{"action":"finish","reason":"<short>"}';

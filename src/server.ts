@@ -29,7 +29,6 @@ import "dotenv/config";
 import express, { Request, Response } from "express";
 import cors from "cors";
 import { GoogleGenAI } from "@google/genai";
-
 import { AgentRequest, Context, CONTRACT_VERSION } from "./core/types";
 import { AgentRegistry } from "./core/registry";
 import { KeywordRouter, LlmRouter, Router } from "./core/router";
@@ -41,7 +40,11 @@ import { ConversationalAgent } from "./agents/conversational";
 import { VisionAgent } from "./agents/vision";
 import { GeminiProvider } from "./llm/gemini";
 import { FileStore } from "./store/fileStore";
+import { MemoryStore } from "./store/memoryStore";
 import { LastMessageSynthesizer, LlmSynthesizer, Synthesizer } from "./core/synthesizer";
+import { GoogleAuth, NotConnectedError } from "./adapters/google-auth";
+import { GoogleGmailAdapter } from "./adapters/gmail";
+import { GoogleCalendarAdapter } from "./adapters/calendar";
 
 // --- config -----------------------------------------------------------------
 const PORT = process.env.PORT ? Number(process.env.PORT) : 8080;
@@ -65,12 +68,75 @@ if (!apiKey) {
 const gemini = new GeminiProvider({ apiKey });
 console.log(`[brain] Gemini active (${gemini.modelId})`);
 
+const store = new FileStore();
+const memoryStore = new MemoryStore();
+
+// Google OAuth — shared by Gmail today and Calendar later. Optional at boot:
+// if the Google env vars aren't set, the executor still loads and will simply
+// tell the user to connect Google when they try to send.
+const googleConfigured = Boolean(
+    process.env.GOOGLE_CLIENT_ID &&
+    process.env.GOOGLE_CLIENT_SECRET &&
+    process.env.GOOGLE_REDIRECT_URI
+);
+const googleAuth = googleConfigured
+    ? new GoogleAuth(
+        {
+            clientId: process.env.GOOGLE_CLIENT_ID as string,
+            clientSecret: process.env.GOOGLE_CLIENT_SECRET as string,
+            redirectUri: process.env.GOOGLE_REDIRECT_URI as string,
+        },
+        store
+    )
+    : null;
+if (googleConfigured) {
+    console.log("[auth] Google OAuth configured.");
+} else {
+    console.warn(
+        "[auth] Google OAuth NOT configured (set GOOGLE_CLIENT_ID, " +
+        "GOOGLE_CLIENT_SECRET, GOOGLE_REDIRECT_URI). Email sending will be " +
+        "disabled until connected."
+    );
+}
+
+// Per-session Gmail adapter factory handed to the executor. If Google isn't
+// configured, the factory still returns an adapter whose send() throws
+// NotConnectedError — which the executor turns into a friendly "connect" reply.
+const gmailFactory = (sessionId: string) => {
+    if (!googleAuth) {
+        return {
+            async send(): Promise<never> {
+                throw new NotConnectedError(sessionId);
+            },
+        };
+    }
+    return new GoogleGmailAdapter(googleAuth, sessionId);
+};
+
+// Per-session Calendar adapter factory (reuses the same Google auth).
+const calendarFactory = (sessionId: string) => {
+    if (!googleAuth) {
+        return {
+            async createEvent(): Promise<never> {
+                throw new NotConnectedError(sessionId);
+            },
+            async updateEvent(): Promise<never> {
+                throw new NotConnectedError(sessionId);
+            },
+        };
+    }
+    return new GoogleCalendarAdapter(googleAuth, sessionId);
+};
+
 const registry = new AgentRegistry();
 registry.register(new ResearcherAgent(gemini)); // real
 registry.register(new PlannerAgent(gemini)); // real
-registry.register(new ExecutorAgent()); // dummy (no LLM needed yet)
 registry.register(new ConversationalAgent(gemini)); // real
+<<<<<<< HEAD
 registry.register(new VisionAgent(gemini)); // real — scenes -> directives
+=======
+registry.register(new ExecutorAgent(gemini, gmailFactory, calendarFactory)); // real (Gmail + Calendar)
+>>>>>>> 84a2de85db7bfdacb4cbf3212268a53a129d2a9d
 
 // LlmRouter is the brain; KeywordRouter stays available as a fallback class.
 const router: Router = new LlmRouter(gemini);
@@ -81,8 +147,7 @@ void KeywordRouter; // kept intentionally for future fallback wiring
 const synth: Synthesizer = new LlmSynthesizer(gemini);
 void LastMessageSynthesizer;
 
-const orchestrator = new Orchestrator(registry, router, synth, { maxSteps: 8 });
-const store = new FileStore();
+const orchestrator = new Orchestrator(registry, router, synth, gemini, memoryStore, { maxSteps: 4 });
 
 // Raw Gemini client for the perception endpoint.
 const visionAI = new GoogleGenAI({ apiKey });
@@ -172,6 +237,52 @@ app.post("/api/chat", async (req: Request, res: Response) => {
         console.error("Chat error:", msg);
         res.status(500).json({ error: msg });
     }
+});
+
+// GET /api/auth/google ------------------------------------------------------
+// Kick off the OAuth consent flow. Pass ?sessionId=... to link a specific
+// session (defaults to "default", matching /api/chat).
+app.get("/api/auth/google", (req: Request, res: Response) => {
+    if (!googleAuth) {
+        return res
+            .status(503)
+            .send("Google OAuth is not configured on the server.");
+    }
+    const sessionId = (req.query.sessionId as string) || "default";
+    res.redirect(googleAuth.consentUrl(sessionId));
+});
+
+// GET /api/auth/google/callback ---------------------------------------------
+// Google redirects here with ?code=...&state=<sessionId>. Exchange + store.
+app.get("/api/auth/google/callback", async (req: Request, res: Response) => {
+    if (!googleAuth) {
+        return res.status(503).send("Google OAuth is not configured.");
+    }
+    const code = req.query.code as string | undefined;
+    const sessionId = (req.query.state as string) || "default";
+    if (!code) {
+        return res.status(400).send("Missing authorization code.");
+    }
+    try {
+        await googleAuth.handleCallback(sessionId, code);
+        res.send(
+            "<h2>Google connected ✅</h2><p>You can close this tab and return " +
+            "to the chat. Try: \"send an email to someone@example.com\".</p>"
+        );
+    } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        console.error("OAuth callback error:", msg);
+        res.status(500).send("Failed to connect Google: " + msg);
+    }
+});
+
+// GET /api/auth/google/status ------------------------------------------------
+app.get("/api/auth/google/status", async (req: Request, res: Response) => {
+    const sessionId = (req.query.sessionId as string) || "default";
+    const connected = googleAuth
+        ? await googleAuth.isConnected(sessionId)
+        : false;
+    res.json({ connected });
 });
 
 // POST /api/vision -----------------------------------------------------------

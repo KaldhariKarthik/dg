@@ -131,7 +131,7 @@ export class Orchestrator {
     private async updateMemory(ctx: Context): Promise<void> {
         try {
             console.log("[memory] Starting background memory extraction...");
-            const memory = await this.memoryStore.loadMemory("default_user");
+            const memory = await this.memoryStore.loadMemory("ctx.userId");
 
             // Get last 6 turns of history for extraction
             const recentHistory = ctx.history.slice(-6);
@@ -195,7 +195,7 @@ export class Orchestrator {
                 }
             }
 
-            await this.memoryStore.saveMemory("default_user", memory);
+            await this.memoryStore.saveMemory("ctx.userId", memory);
             console.log("[memory] ✅ Memory updated successfully in Firestore/local.");
         } catch (e) {
             console.error("[memory] Failed to update memory:", e);

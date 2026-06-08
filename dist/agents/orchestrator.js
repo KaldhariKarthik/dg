@@ -28,12 +28,16 @@ class Orchestrator {
     registry;
     router;
     synth;
+    llm;
+    memoryStore;
     opts;
     name = "orchestrator";
-    constructor(registry, router, synth, opts = {}) {
+    constructor(registry, router, synth, llm, memoryStore, opts = {}) {
         this.registry = registry;
         this.router = router;
         this.synth = synth;
+        this.llm = llm;
+        this.memoryStore = memoryStore;
         this.opts = opts;
     }
     /**
@@ -99,7 +103,75 @@ class Orchestrator {
         if (steps >= maxSteps) {
             stopReason = `step cap reached (${maxSteps})`;
         }
-        return this.assemble(req, soFar, stopReason);
+        const response = await this.assemble(req, soFar, stopReason);
+        // Run memory extraction in the background (asynchronous/non-blocking)
+        this.updateMemory(ctx).catch(err => console.error("[memory] Background update failed:", err));
+        return response;
+    }
+    /** Extract insights from conversation turns and update memory profile. */
+    async updateMemory(ctx) {
+        try {
+            console.log("[memory] Starting background memory extraction...");
+            const memory = await this.memoryStore.loadMemory("ctx.userId");
+            // Get last 6 turns of history for extraction
+            const recentHistory = ctx.history.slice(-6);
+            if (recentHistory.length === 0)
+                return;
+            const conversationText = recentHistory.map(t => `${t.role}: ${t.message}`).join("\n");
+            const system = "You are a memory extractor. Analyze the conversation history and update the user's memory profile.\n" +
+                "Only extract information that is explicitly stated or strongly implied by the user.\n" +
+                "Do not invent preferences, facts, or habits.\n" +
+                "Return a strict JSON object matching this schema:\n" +
+                "{\n" +
+                "  \"preferences\": [\"key:value\", ...],\n" +
+                "  \"past_patterns\": [\"recurring habit description\", ...],\n" +
+                "  \"long_term_facts\": [\"long term fact description\", ...]\n" +
+                "}";
+            const user = `Current Memory Profile:\n${JSON.stringify(memory, null, 2)}\n\n` +
+                `Recent Conversation:\n${conversationText}\n\n` +
+                `Extract any new preferences, past patterns, or long-term facts, and output the updated entries as JSON.`;
+            const raw = await this.llm.complete([
+                { role: "system", content: system },
+                { role: "user", content: user }
+            ], { temperature: 0.1 });
+            // Parse response
+            const cleaned = raw.replace(/```json|```/g, "").trim();
+            const start = cleaned.indexOf("{");
+            const end = cleaned.lastIndexOf("}");
+            if (start === -1 || end === -1 || end < start)
+                return;
+            const parsed = JSON.parse(cleaned.slice(start, end + 1));
+            // Merge preferences
+            if (Array.isArray(parsed.preferences)) {
+                for (const pref of parsed.preferences) {
+                    if (typeof pref === "string" && pref.includes(":")) {
+                        const [k, v] = pref.split(":", 2);
+                        memory.preferences[k.trim()] = v.trim();
+                    }
+                }
+            }
+            // Merge patterns
+            if (Array.isArray(parsed.past_patterns)) {
+                for (const pattern of parsed.past_patterns) {
+                    if (typeof pattern === "string" && !memory.past_patterns.includes(pattern)) {
+                        memory.past_patterns.push(pattern);
+                    }
+                }
+            }
+            // Merge facts
+            if (Array.isArray(parsed.long_term_facts)) {
+                for (const fact of parsed.long_term_facts) {
+                    if (typeof fact === "string" && !memory.long_term_facts.includes(fact)) {
+                        memory.long_term_facts.push(fact);
+                    }
+                }
+            }
+            await this.memoryStore.saveMemory("ctx.userId", memory);
+            console.log("[memory] ✅ Memory updated successfully in Firestore/local.");
+        }
+        catch (e) {
+            console.error("[memory] Failed to update memory:", e);
+        }
     }
     /**
      * Fold the agents' outputs into one user-facing response.

@@ -233,7 +233,7 @@ export class ExecutorAgent implements Agent {
             body: draft.body,
         };
         try {
-            const result = await this.gmailFactory(ctx.sessionId).send(email);
+            const result = await this.gmailFactory(ctx.userId).send(email);
             return {
                 contractVersion: CONTRACT_VERSION,
                 from: this.name,
@@ -379,7 +379,7 @@ export class ExecutorAgent implements Agent {
             attendees: draft.attendees,
         };
         try {
-            const result = await this.calendarFactory(ctx.sessionId).createEvent(event);
+            const result = await this.calendarFactory(ctx.userId).createEvent(event);
             const link = result.htmlLink ? `\n${result.htmlLink}` : "";
             const last: LastEvent = {
                 id: result.id,
@@ -547,7 +547,7 @@ export class ExecutorAgent implements Agent {
         }
         // confirm -> apply patch
         try {
-            const result = await this.calendarFactory(ctx.sessionId).updateEvent(
+            const result = await this.calendarFactory(ctx.userId).updateEvent(
                 edit.eventId,
                 edit.patch
             );

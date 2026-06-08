@@ -701,8 +701,11 @@
         <!-- Dynamic Memory Data (fetched from Firestore/local) -->
         <section id="memory-data-section" class="glass-card bento-border rounded-bento p-6 space-y-4 mb-6">
             <div class="flex justify-between items-center">
-                <h2 class="font-label-caps text-label-caps text-primary/50 tracking-widest uppercase">What I Remember</h2>
-                <button id="memory-refresh-btn" class="material-symbols-outlined text-primary text-sm opacity-50 hover:opacity-100 transition-opacity cursor-pointer bg-transparent border-none" title="Refresh memory">refresh</button>
+                <h2 class="font-label-caps text-label-caps text-primary/50 tracking-widest uppercase">What I Remember
+                </h2>
+                <button id="memory-refresh-btn"
+                    class="material-symbols-outlined text-primary text-sm opacity-50 hover:opacity-100 transition-opacity cursor-pointer bg-transparent border-none"
+                    title="Refresh memory">refresh</button>
             </div>
             <div id="memory-loading" class="text-on-surface-variant text-sm opacity-60">Loading memory...</div>
             <div id="memory-content" class="space-y-4 hidden">
@@ -1045,8 +1048,40 @@
         })();
 
         // ========== Init ==========
-        showScreen('home');
+        // ========== Auth gate ==========
+        async function bootstrap() {
+            try {
+                const res = await fetch('/api/me');
+                if (!res.ok) throw new Error('unauthenticated');
+                const me = await res.json();
+                document.getElementById('auth-gate').style.display = 'none';
+                showScreen('home');
+                // (optional) surface who's signed in / a sign-out control here using `me`
+            } catch {
+                document.getElementById('auth-gate').style.display = 'flex';
+            }
+        }
+        bootstrap();
     </script>
+    <div id="auth-gate" class="fixed inset-0 z-[100] bg-background flex items-center justify-center px-margin-mobile"
+        style="display:none;">
+        <div class="glass-card bento-border rounded-bento p-8 max-w-sm w-full text-center">
+            <div class="flex items-center justify-center gap-2 mb-6">
+                <span class="material-symbols-outlined text-primary"
+                    style="font-variation-settings:'FILL' 1;">terminal</span>
+                <span class="font-label-caps text-label-caps tracking-widest text-primary">DAVINCI</span>
+            </div>
+            <h2 class="font-headline-md text-headline-md text-primary mb-2">Sign in to continue</h2>
+            <p class="font-body-md text-on-surface-variant text-sm mb-6">DaVinci reasons over your calendar and files.
+                Sign
+                in with Google to begin.</p>
+            <a href="/api/auth/google"
+                class="block w-full bg-primary text-background py-3 rounded-xl font-label-caps text-label-caps tracking-widest active:scale-95 transition-transform">
+                Continue with Google
+            </a>
+        </div>
+    </div>
+
 </body>
 
 </html>

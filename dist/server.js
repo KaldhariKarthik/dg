@@ -2,28 +2,20 @@
 /**
  * src/server.ts — the HTTP edge. THE SINGLE SERVER ENTRYPOINT.
  *
- * (The old root-level server.js is gone. It split the app in two and imported
- * @google/generative-ai, a package no longer in package.json — so it couldn't
- * even start. Everything it did well now lives here.)
+ * Multi-user: every request's identity comes from a server-side session resolved
+ * from an httpOnly cookie (attachUser middleware). No route trusts a client-sent
+ * id. The old `"default"` / `session_id`-in-body / `sess_random` identities are
+ * gone — everything keys off the authenticated `req.userId` (Google sub).
  *
- * Routes — exactly the shapes the website already speaks:
- *   POST /api/chat        { message, sessionId?, history? }    -> { reply }
- *   POST /api/vision      { image, tier?, task_context?, ... } -> v1.0 envelope
- *   POST /api/orchestrate { session_id?, observation }         -> directive
- *   static serving of public/
- *
- * /api/chat flows through the orchestrator (researcher/planner/executor/
- * conversational routed by Gemini) — the website doesn't notice; same request,
- * same { reply }.
- *
- * /api/vision is the PERCEPTION EDGE: one frame -> the structured v1.0
- * observation the client expects. Pure description; it never decides what to
- * SAY.
- *
- * /api/orchestrate is the VISION BRIDGE: it takes one of those observations,
- * runs it through the SAME orchestrator as a SceneInput (which routes to the
- * VisionAgent), and returns the directive the perception client speaks and acts
- * on. This is where description becomes decision.
+ * Routes:
+ *   GET  /api/auth/google           -> begin Google login (identity+Gmail+Cal)
+ *   GET  /api/auth/google/callback  -> verify, upsert user, mint session
+ *   POST /api/auth/logout           -> revoke session
+ *   GET  /api/me                    -> current user + connected capabilities
+ *   POST /api/chat        (auth)    -> { message } -> { reply }
+ *   POST /api/vision      (auth)    -> { image, tier?, ... } -> v1.0 envelope
+ *   POST /api/orchestrate (auth)    -> { observation } -> directive
+ *   static public/
  */
 var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
@@ -32,6 +24,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 require("dotenv/config");
 const express_1 = __importDefault(require("express"));
 const cors_1 = __importDefault(require("cors"));
+const crypto_1 = require("crypto");
 const genai_1 = require("@google/genai");
 const types_1 = require("./core/types");
 const registry_1 = require("./core/registry");
@@ -43,74 +36,148 @@ const executor_1 = require("./agents/executor");
 const conversational_1 = require("./agents/conversational");
 const vision_1 = require("./agents/vision");
 const gemini_1 = require("./llm/gemini");
-const fileStore_1 = require("./store/fileStore");
 const synthesizer_1 = require("./core/synthesizer");
+const google_auth_1 = require("./adapters/google-auth");
+const gmail_1 = require("./adapters/gmail");
+const calendar_1 = require("./adapters/calendar");
+const googleOAuth_1 = require("./auth/googleOAuth");
+const middleware_1 = require("./auth/middleware");
+const factory_1 = require("./store/factory");
 // --- config -----------------------------------------------------------------
 const PORT = process.env.PORT ? Number(process.env.PORT) : 8080;
 const apiKey = process.env.GEMINI_API_KEY ?? process.env.API_KEY;
-// Vision model tiers. fast = high-frequency streaming path (cheap, low-latency);
-// deep = explicit user questions / harder visual reasoning. The client picks
-// the tier per frame via `tier: "fast" | "deep"`.
 const VISION_MODEL_FAST = "gemini-3.1-flash-lite";
 const VISION_MODEL_DEEP = "gemini-3.5-flash";
 if (!apiKey) {
-    console.error("[fatal] No API key found (set API_KEY or GEMINI_API_KEY in .env). " +
-        "The researcher and planner agents require it.");
+    console.error("[fatal] No API key (set API_KEY or GEMINI_API_KEY).");
+    process.exit(1);
+}
+// Multi-user REQUIRES Google login, so Google OAuth must be configured.
+const googleCfg = {
+    clientId: process.env.GOOGLE_CLIENT_ID ?? "",
+    clientSecret: process.env.GOOGLE_CLIENT_SECRET ?? "",
+    redirectUri: process.env.GOOGLE_REDIRECT_URI ?? "",
+};
+if (!googleCfg.clientId || !googleCfg.clientSecret || !googleCfg.redirectUri) {
+    console.error("[fatal] Google OAuth not configured. Multi-user login needs " +
+        "GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, GOOGLE_REDIRECT_URI " +
+        "(redirect URI must point to /api/auth/google/callback).");
     process.exit(1);
 }
 // --- wiring (built once at startup) -----------------------------------------
 const gemini = new gemini_1.GeminiProvider({ apiKey });
 console.log(`[brain] Gemini active (${gemini.modelId})`);
+const stores = (0, factory_1.buildStores)();
+const { users, sessions, working: store, memory: memoryStore } = stores;
+const googleLogin = new googleOAuth_1.GoogleLogin(googleCfg);
+const googleApiAuth = new google_auth_1.GoogleAuth(googleCfg, users);
+console.log("[auth] Google OAuth configured.");
+// Per-user adapter factories handed to the executor.
+const gmailFactory = (userId) => new gmail_1.GoogleGmailAdapter(googleApiAuth, userId);
+const calendarFactory = (userId) => new calendar_1.GoogleCalendarAdapter(googleApiAuth, userId);
 const registry = new registry_1.AgentRegistry();
-registry.register(new researcher_1.ResearcherAgent(gemini)); // real
-registry.register(new planner_1.PlannerAgent(gemini)); // real
-registry.register(new executor_1.ExecutorAgent()); // dummy (no LLM needed yet)
-registry.register(new conversational_1.ConversationalAgent(gemini)); // real
-registry.register(new vision_1.VisionAgent(gemini)); // real — scenes -> directives
-// LlmRouter is the brain; KeywordRouter stays available as a fallback class.
+registry.register(new researcher_1.ResearcherAgent(gemini));
+registry.register(new planner_1.PlannerAgent(gemini));
+registry.register(new conversational_1.ConversationalAgent(gemini));
+registry.register(new vision_1.VisionAgent(gemini));
+registry.register(new executor_1.ExecutorAgent(gemini, gmailFactory, calendarFactory));
 const router = new router_1.LlmRouter(gemini);
-void router_1.KeywordRouter; // kept intentionally for future fallback wiring
-// LlmSynthesizer fuses multi-agent turns into one DaVinci voice;
-// LastMessageSynthesizer stays available as the no-key / test fallback.
+void router_1.KeywordRouter;
 const synth = new synthesizer_1.LlmSynthesizer(gemini);
 void synthesizer_1.LastMessageSynthesizer;
-const orchestrator = new orchestrator_1.Orchestrator(registry, router, synth, { maxSteps: 8 });
-const store = new fileStore_1.FileStore();
-// Raw Gemini client for the perception endpoint.
+const orchestrator = new orchestrator_1.Orchestrator(registry, router, synth, gemini, memoryStore, { maxSteps: 4 });
 const visionAI = new genai_1.GoogleGenAI({ apiKey });
 // --- app --------------------------------------------------------------------
 const app = (0, express_1.default)();
 app.use(express_1.default.json({ limit: "10mb" }));
-app.use((0, cors_1.default)()); // permissive for dev; tighten when deployment is known
+app.use((0, cors_1.default)({ origin: true, credentials: true })); // same-origin app; credentials for cookies
+app.use((0, middleware_1.makeAttachUser)(sessions)); // populates req.userId from the session cookie
 app.use(express_1.default.static("public"));
-// POST /api/chat -------------------------------------------------------------
-app.post("/api/chat", async (req, res) => {
+/* ============================ AUTH ROUTES ============================== */
+// GET /api/auth/google — begin login. Sets an anti-CSRF state cookie and
+// redirects to Google's consent screen (identity + Gmail + Calendar).
+app.get("/api/auth/google", (_req, res) => {
+    const state = (0, crypto_1.randomBytes)(16).toString("hex");
+    (0, middleware_1.setOAuthStateCookie)(res, state);
+    res.redirect(googleLogin.consentUrl(state));
+});
+// GET /api/auth/google/callback — verify, upsert user, mint session.
+app.get("/api/auth/google/callback", async (req, res) => {
+    const code = req.query.code;
+    const state = req.query.state;
+    const expected = (0, middleware_1.readCookie)(req, middleware_1.OAUTH_STATE_COOKIE);
+    (0, middleware_1.clearOAuthStateCookie)(res);
+    if (!code)
+        return res.status(400).send("Missing authorization code.");
+    if (!state || !expected || state !== expected) {
+        return res.status(400).send("Invalid OAuth state. Please try signing in again.");
+    }
     try {
-        const { message, sessionId, history } = req.body;
-        if (!message) {
-            return res.status(400).json({ error: "message is required." });
+        const verified = await googleLogin.handleCallback(code);
+        await users.upsertUser({
+            id: verified.userId,
+            email: verified.email,
+            displayName: verified.displayName,
+        });
+        // Only overwrite the stored credential if Google gave us a refresh
+        // token (it does on first consent + prompt=consent). Otherwise merge so
+        // we keep the existing one.
+        if (verified.google.refresh_token) {
+            await users.setGoogleCredential(verified.userId, verified.google);
         }
-        const sid = sessionId ?? "default";
-        // Load durable server-side state (plans + conversation) for this session.
-        const state = await store.load(sid);
-        let storedHistory = Array.isArray(state.conversation)
+        else {
+            await users.mergeGoogleTokens(verified.userId, verified.google);
+        }
+        const session = await sessions.create(verified.userId);
+        (0, middleware_1.setSessionCookie)(res, session.id);
+        res.redirect("/");
+    }
+    catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        console.error("OAuth callback error:", msg);
+        res.status(500).send("Failed to sign in with Google: " + msg);
+    }
+});
+// POST /api/auth/logout — revoke this session.
+app.post("/api/auth/logout", async (req, res) => {
+    const sid = (0, middleware_1.readCookie)(req, middleware_1.SESSION_COOKIE);
+    if (sid)
+        await sessions.revoke(sid).catch(() => { });
+    (0, middleware_1.clearSessionCookie)(res);
+    res.json({ ok: true });
+});
+// GET /api/me — who am I, and what's connected.
+app.get("/api/me", middleware_1.requireAuth, async (req, res) => {
+    const user = await users.getUser(req.userId);
+    if (!user)
+        return res.status(401).json({ error: "Not authenticated." });
+    const scopes = user.google?.scopes ?? [];
+    res.json({
+        id: user.id,
+        email: user.email,
+        displayName: user.displayName,
+        connected: {
+            google: Boolean(user.google?.refresh_token),
+            gmail: scopes.includes("https://www.googleapis.com/auth/gmail.send"),
+            calendar: scopes.includes("https://www.googleapis.com/auth/calendar"),
+        },
+    });
+});
+/* ============================ APP ROUTES ============================== */
+// POST /api/chat -------------------------------------------------------------
+app.post("/api/chat", middleware_1.requireAuth, async (req, res) => {
+    try {
+        const { message } = req.body;
+        if (!message)
+            return res.status(400).json({ error: "message is required." });
+        const userId = req.userId;
+        const state = await store.load(userId);
+        const storedHistory = Array.isArray(state.conversation)
             ? state.conversation
             : [];
-        if (storedHistory.length === 0 && Array.isArray(history)) {
-            storedHistory = history.map((h) => ({
-                role: h.role === "user" ? "user" : "researcher",
-                message: (h.parts ?? []).map((p) => p.text ?? "").join(" "),
-                at: new Date().toISOString(),
-            }));
-        }
-        // Append the new user message to history before running the turn.
-        storedHistory.push({
-            role: "user",
-            message,
-            at: new Date().toISOString(),
-        });
+        storedHistory.push({ role: "user", message, at: new Date().toISOString() });
         const ctx = {
-            sessionId: sid,
+            userId,
             state,
             history: storedHistory,
             startedAt: new Date().toISOString(),
@@ -120,12 +187,8 @@ app.post("/api/chat", async (req, res) => {
             input: { kind: "text", text: message },
         };
         const result = await orchestrator.run(agentReq, ctx);
-        // The orchestrator appended agent turns to ctx.history during the run.
-        // Persist the full conversation (trimmed) plus whatever plan/state the
-        // agents updated.
-        ctx.state.conversation = ctx.history.slice(-40); // keep last 40 turns
-        await store.save(sid, ctx.state);
-        // Map the rich AgentResponse down to the website's { reply } contract.
+        ctx.state.conversation = ctx.history.slice(-40);
+        await store.save(userId, ctx.state);
         res.json({ reply: result.message });
     }
     catch (err) {
@@ -135,9 +198,6 @@ app.post("/api/chat", async (req, res) => {
     }
 });
 // POST /api/vision -----------------------------------------------------------
-// Perception edge: one frame -> structured v1.0 observation envelope. Pure
-// description. The client decides when to forward an observation upward; the
-// orchestrator (not this endpoint) decides what to say back.
 const VISION_SYSTEM = `You are DaVinci's vision module. You receive one camera frame plus optional task context,
 recent scene summaries, and an optional user transcript. Reply with ONE JSON object and nothing else —
 no markdown, no code fences, no prose. Describe only what is actually visible; never invent detail.
@@ -167,23 +227,18 @@ Rules:
 - explicitly_mentioned: object labels the user named in their transcript; [] if none.
 - If "task" is not provided in context, infer it from the scene. Echo "mode" as given (default "observe").
 - Salient objects only. Keep every string short.`;
-app.post("/api/vision", async (req, res) => {
+app.post("/api/vision", middleware_1.requireAuth, async (req, res) => {
     try {
-        const { image, tier, session_id, task_context, user_transcript, recent, media_meta, } = req.body;
-        if (!image) {
+        const { image, tier, task_context, user_transcript, recent, media_meta, } = req.body;
+        if (!image)
             return res.status(400).json({ error: "image is required." });
-        }
         const modelName = tier === "deep" ? VISION_MODEL_DEEP : VISION_MODEL_FAST;
         const ctxLine = `Context — task: ${task_context?.task || "infer it"}; mode: ${task_context?.mode || "observe"}; ` +
             `recent: ${(recent || []).filter(Boolean).join(" | ") || "none"}.`;
         const qLine = user_transcript && user_transcript.trim()
             ? `User transcript: "${user_transcript.trim()}". Note referenced objects in explicitly_mentioned.`
             : "No user transcript.";
-        const prompt = [
-            ctxLine,
-            qLine,
-            "Return only the JSON object from your instructions.",
-        ].join("\n");
+        const prompt = [ctxLine, qLine, "Return only the JSON object from your instructions."].join("\n");
         const base64Data = image.replace(/^data:image\/\w+;base64,/, "");
         const response = await visionAI.models.generateContent({
             model: modelName,
@@ -202,11 +257,10 @@ app.post("/api/vision", async (req, res) => {
             },
         });
         const m = normalize(safeParse(response.text ?? ""));
-        // Assemble the v1.0 envelope — model content + server-stamped metadata.
         res.json({
             schema_version: "1.0",
             input_type: "visual",
-            session_id: session_id || null,
+            session_id: req.userId, // authenticated user, not a client-sent id
             timestamp: new Date().toISOString(),
             task_context: {
                 task: task_context?.task || m.task_context.task || "unknown",
@@ -233,22 +287,16 @@ app.post("/api/vision", async (req, res) => {
     }
 });
 // POST /api/orchestrate ------------------------------------------------------
-// The VISION BRIDGE. A structured observation -> the orchestrator -> a directive
-// the perception client speaks and acts on. Vision turns are kept OUT of the
-// chat conversation history so the transcript stays clean. The active watch_for
-// is persisted in this session's state (written by the VisionAgent via
-// stateDelta), so the SERVER is the source of truth across frames.
-app.post("/api/orchestrate", async (req, res) => {
+app.post("/api/orchestrate", middleware_1.requireAuth, async (req, res) => {
     try {
-        const { session_id, observation } = req.body;
-        if (!observation) {
+        const { observation } = req.body;
+        if (!observation)
             return res.status(400).json({ error: "observation is required." });
-        }
-        const sid = session_id ?? "default";
-        const state = await store.load(sid);
+        const userId = req.userId;
+        const state = await store.load(userId);
         const transcript = observation?.user_flags?.user_transcript || undefined;
         const ctx = {
-            sessionId: sid,
+            userId,
             state,
             history: [], // vision observations don't pollute the chat transcript
             startedAt: new Date().toISOString(),
@@ -258,10 +306,7 @@ app.post("/api/orchestrate", async (req, res) => {
             input: { kind: "scene", scene: observation, text: transcript },
         };
         const result = await orchestrator.run(agentReq, ctx);
-        // Persist whatever vision wrote (e.g. the active watch_for) for next frame.
-        await store.save(sid, ctx.state);
-        // Map the orchestrator result down to the perception client's directive.
-        // The VisionAgent's structured payload rides in result.data.result.
+        await store.save(userId, ctx.state);
         const directive = (result.data || {}).result || {};
         res.json({
             guidance: result.message || "",
@@ -332,5 +377,5 @@ function normalize(o) {
     };
 }
 // --- start ------------------------------------------------------------------
-app.listen(PORT, () => console.log(`DaVinci server up on http://localhost:${PORT}`));
+app.listen(PORT, () => console.log(`DaVinci server up on http://localhost:${PORT} [store: ${stores.backend}]`));
 //# sourceMappingURL=server.js.map

@@ -1,3 +1,4 @@
+"use strict";
 /**
  * src/store/memoryStore.ts — the LONG-TERM MEMORY seam.
  *
@@ -10,20 +11,9 @@
  * old hardcoded "default_user". Wiring memory INTO agent reasoning is a later
  * step; this step only fixes the seam and the key.
  */
-
-export interface MemoryData {
-    preferences: Record<string, string>;
-    past_patterns: string[];
-    long_term_facts: string[];
-}
-
-export function emptyMemory(): MemoryData {
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.emptyMemory = emptyMemory;
+function emptyMemory() {
     return { preferences: {}, past_patterns: [], long_term_facts: [] };
 }
-
-export interface MemoryStore {
-    /** Load a user's memory profile, or an empty profile if none exists yet. */
-    loadMemory(userId: string): Promise<MemoryData>;
-    /** Persist a user's memory profile (full replace). */
-    saveMemory(userId: string, memory: MemoryData): Promise<void>;
-}
+//# sourceMappingURL=memoryStore.js.map

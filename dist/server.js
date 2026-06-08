@@ -43,6 +43,7 @@ const calendar_1 = require("./adapters/calendar");
 const googleOAuth_1 = require("./auth/googleOAuth");
 const middleware_1 = require("./auth/middleware");
 const factory_1 = require("./store/factory");
+const planStore_1 = require("./store/planStore");
 // --- config -----------------------------------------------------------------
 const PORT = process.env.PORT ? Number(process.env.PORT) : 8080;
 const apiKey = process.env.GEMINI_API_KEY ?? process.env.API_KEY;
@@ -68,7 +69,7 @@ if (!googleCfg.clientId || !googleCfg.clientSecret || !googleCfg.redirectUri) {
 const gemini = new gemini_1.GeminiProvider({ apiKey });
 console.log(`[brain] Gemini active (${gemini.modelId})`);
 const stores = (0, factory_1.buildStores)();
-const { users, sessions, working: store, memory: memoryStore } = stores;
+const { users, sessions, working: store, memory: memoryStore, plans } = stores;
 const googleLogin = new googleOAuth_1.GoogleLogin(googleCfg);
 const googleApiAuth = new google_auth_1.GoogleAuth(googleCfg, users);
 console.log("[auth] Google OAuth configured.");
@@ -176,6 +177,62 @@ app.get("/api/memory", middleware_1.requireAuth, async (req, res) => {
     }
 });
 /* ============================ APP ROUTES ============================== */
+/**
+ * If the planner proposed a plan this turn (stateDelta.planUpsert), upsert it
+ * into the PlanStore — the SERVER owns id + timestamps via normalizePlan, so a
+ * fumbled generation can't drift an id or erase createdAt. Then strip plan keys
+ * from the working bag: plans live only in the PlanStore, never the bag.
+ */
+async function commitPlanUpsert(ctx, userId) {
+    const proposed = ctx.state.planUpsert;
+    if (proposed && typeof proposed === "object") {
+        const existing = proposed.id ? await plans.getPlan(userId, proposed.id) : null;
+        await plans.upsertPlan(userId, (0, planStore_1.normalizePlan)(proposed, existing));
+    }
+    delete ctx.state.planUpsert;
+    delete ctx.state.plans;
+}
+// GET /api/plans — the current user's live plans (most-recently-updated first).
+app.get("/api/plans", middleware_1.requireAuth, async (req, res) => {
+    try {
+        res.json({ plans: await plans.listPlans(req.userId) });
+    }
+    catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        console.error("Plans error:", msg);
+        res.status(500).json({ error: msg });
+    }
+});
+// POST /api/plans/step — check a step on/off. Atomic per-plan on Firestore.
+app.post("/api/plans/step", middleware_1.requireAuth, async (req, res) => {
+    try {
+        const { planId, stepIndex, done } = req.body;
+        if (!planId || typeof stepIndex !== "number") {
+            return res.status(400).json({ error: "planId and numeric stepIndex are required." });
+        }
+        const updated = await plans.setStepDone(req.userId, planId, stepIndex, Boolean(done));
+        if (!updated)
+            return res.status(404).json({ error: "Plan not found." });
+        res.json({ plan: updated });
+    }
+    catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        console.error("Plan step error:", msg);
+        res.status(500).json({ error: msg });
+    }
+});
+// DELETE /api/plans/:id — remove a plan the user no longer wants.
+app.delete("/api/plans/:id", middleware_1.requireAuth, async (req, res) => {
+    try {
+        await plans.deletePlan(req.userId, String(req.params.id));
+        res.json({ ok: true });
+    }
+    catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        console.error("Plan delete error:", msg);
+        res.status(500).json({ error: msg });
+    }
+});
 // POST /api/chat -------------------------------------------------------------
 app.post("/api/chat", middleware_1.requireAuth, async (req, res) => {
     try {
@@ -184,6 +241,9 @@ app.post("/api/chat", middleware_1.requireAuth, async (req, res) => {
             return res.status(400).json({ error: "message is required." });
         const userId = req.userId;
         const state = await store.load(userId);
+        // Plans live in their OWN store, not the working bag. Inject the current
+        // set for the planner to read this turn; stripped again before save.
+        state.plans = await plans.listPlans(userId);
         const storedHistory = Array.isArray(state.conversation)
             ? state.conversation
             : [];
@@ -199,6 +259,7 @@ app.post("/api/chat", middleware_1.requireAuth, async (req, res) => {
             input: { kind: "text", text: message },
         };
         const result = await orchestrator.run(agentReq, ctx);
+        await commitPlanUpsert(ctx, userId);
         ctx.state.conversation = ctx.history.slice(-40);
         await store.save(userId, ctx.state);
         res.json({ reply: result.message });
@@ -306,6 +367,7 @@ app.post("/api/orchestrate", middleware_1.requireAuth, async (req, res) => {
             return res.status(400).json({ error: "observation is required." });
         const userId = req.userId;
         const state = await store.load(userId);
+        state.plans = await plans.listPlans(userId);
         const transcript = observation?.user_flags?.user_transcript || undefined;
         const ctx = {
             userId,
@@ -318,6 +380,7 @@ app.post("/api/orchestrate", middleware_1.requireAuth, async (req, res) => {
             input: { kind: "scene", scene: observation, text: transcript },
         };
         const result = await orchestrator.run(agentReq, ctx);
+        await commitPlanUpsert(ctx, userId);
         await store.save(userId, ctx.state);
         const directive = (result.data || {}).result || {};
         res.json({

@@ -14,6 +14,7 @@
 import * as admin from "firebase-admin";
 import { Store } from "../store";
 import { MemoryStore, MemoryData, emptyMemory, applyMemoryDelta } from "../memoryStore";
+import { Plan, PlanStore } from "../planStore";
 import { newSessionId } from "../ids";
 import { UserStore, SessionStore, UpsertUserInput } from "../../auth/stores";
 import { User, Session, GoogleCredential, IntegrationCredential } from "../../auth/types";
@@ -208,5 +209,62 @@ export class FirestoreMemoryStore implements MemoryStore {
             t.set(ref, merged);
             return merged;
         });
+    }
+}
+
+/* ----------------------------------- PLANS ----------------------------------- */
+
+/**
+ * FirestorePlanStore — each plan is its own document under
+ * plans/{userId}/items/{planId}. Because a plan lives in its own doc, upsert /
+ * delete touch exactly that doc, and setStepDone runs as a single-document
+ * transaction — genuinely atomic. A check-off can no longer be clobbered by the
+ * orchestrator's working-state save, because plans aren't in the working bag.
+ */
+export class FirestorePlanStore implements PlanStore {
+    constructor(private db: admin.firestore.Firestore) { }
+
+    private items(userId: string): admin.firestore.CollectionReference {
+        return this.db.collection("plans").doc(userId).collection("items");
+    }
+
+    async listPlans(userId: string): Promise<Plan[]> {
+        const snap = await this.items(userId).get();
+        const plans = snap.docs.map((d) => d.data() as Plan);
+        plans.sort((a, b) => (b.updatedAt || "").localeCompare(a.updatedAt || ""));
+        return plans;
+    }
+
+    async getPlan(userId: string, planId: string): Promise<Plan | null> {
+        const snap = await this.items(userId).doc(planId).get();
+        return snap.exists ? (snap.data() as Plan) : null;
+    }
+
+    async upsertPlan(userId: string, plan: Plan): Promise<Plan> {
+        await this.items(userId).doc(plan.id).set(plan);
+        return plan;
+    }
+
+    async setStepDone(
+        userId: string,
+        planId: string,
+        stepIndex: number,
+        done: boolean
+    ): Promise<Plan | null> {
+        const ref = this.items(userId).doc(planId);
+        return this.db.runTransaction(async (t) => {
+            const snap = await t.get(ref);
+            if (!snap.exists) return null;
+            const plan = snap.data() as Plan;
+            if (stepIndex < 0 || stepIndex >= plan.steps.length) return plan;
+            plan.steps[stepIndex].done = done;
+            plan.updatedAt = nowIso();
+            t.set(ref, plan);
+            return plan;
+        });
+    }
+
+    async deletePlan(userId: string, planId: string): Promise<void> {
+        await this.items(userId).doc(planId).delete();
     }
 }

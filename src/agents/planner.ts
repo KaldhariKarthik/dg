@@ -1,17 +1,22 @@
 /**
  * src/agents/planner.ts
  *
- * REAL agent. DATE-AWARE, and now MEMORY-AWARE.
+ * REAL agent. DATE-AWARE and MEMORY-AWARE.
  *
- * Plans are structured objects in ctx.state.plans (persisted by the Store).
- * The planner reads existing plans + recent conversation + the user's long-term
- * memory, decides create/update/report, and writes the updated set back via
- * stateDelta.
+ * SINGLE-PLAN-PER-TURN (Step 4): the planner returns the ONE plan it created or
+ * updated, never the whole array. It emits that plan on `stateDelta.planUpsert`;
+ * the server upserts it by id into the PlanStore and leaves every other plan
+ * untouched BY CONSTRUCTION. There is no array to re-emit, so a fumbled
+ * generation can't silently drop a plan — the old failure mode is gone at the
+ * root. For pure "what's my plan?" reports the planner emits no plan at all.
  *
- * Memory use (v1.2): the planner may bias plans toward known preferences/
- * patterns (e.g. a habit of trimming plans down -> lean simpler) — but memory is
- * CONTEXT, never a command. An explicit request ("plan a 2-week trip") always
- * wins over a remembered "prefers short trips".
+ * The planner reads existing plans from ctx.state.plans, which the SERVER injects
+ * from the PlanStore for the turn (plans live in their own store, not the working
+ * bag). The server also owns id + timestamps; the planner only proposes content.
+ *
+ * Memory use (v1.2): the planner may bias plans toward known preferences/patterns
+ * — but memory is CONTEXT, never a command. An explicit request ("plan a 2-week
+ * trip") always wins over a remembered "prefers short trips".
  */
 
 import {
@@ -22,26 +27,12 @@ import {
     CONTRACT_VERSION,
 } from "../core/types";
 import { LLMProvider } from "../llm/provider";
-
-interface PlanStep {
-    text: string;
-    done: boolean;
-    phase?: string;
-}
-
-interface Plan {
-    id: string;
-    goal: string;
-    timeframe?: string;
-    targetDate?: string;
-    steps: PlanStep[];
-    createdAt: string;
-    updatedAt: string;
-}
+import { Plan, ProposedPlan } from "../store/planStore";
 
 interface PlannerLlmResult {
     reply: string;
-    plans: Plan[];
+    action: "create" | "update" | "report";
+    plan: ProposedPlan | null;
 }
 
 /** Format the user's memory as optional prompt context, with a guardrail. */
@@ -93,38 +84,48 @@ export class PlannerAgent implements Agent {
             "user's goals over time. You know today's date and reason about real " +
             "timeframes.\n\n" +
             "TIMEFRAME — be sensible, NOT rigid:\n" +
-            "- Compute the target end date from today's date and the user's " +
-            "timeframe.\n" +
+            "- Compute the target end date from today's date and the user's timeframe.\n" +
             "- Break the plan into whatever chunks NATURALLY fit that duration. Do " +
             "NOT force weeks. Use your judgment and label each phase honestly.\n" +
             "- Steps must be specific and progressive, sized to the real timeframe.\n\n" +
+            "ONE PLAN PER TURN — this is critical:\n" +
+            "- You are given ALL the user's current plans as JSON, for context only.\n" +
+            "- You act on exactly ONE plan: the one the user is talking about.\n" +
+            "- To UPDATE an existing plan, set plan.id to that plan's EXACT id from " +
+            "the list, and return the full updated plan (mark steps done to track " +
+            "progress).\n" +
+            "- To CREATE a new plan, set plan.id to a short new slug (e.g. " +
+            "\"goa-trip\").\n" +
+            "- To just REPORT/answer about plans without changing anything, set " +
+            "action \"report\" and plan null.\n" +
+            "- NEVER return the other plans. The server preserves them automatically. " +
+            "Touch one plan only.\n\n" +
             "RESPONSE SCOPE:\n" +
             "- Reply about the plan the user is actually discussing. Do NOT recite " +
             "every plan. You MAY briefly mention another plan only if it's genuinely " +
             "relevant (e.g. a scheduling conflict).\n\n" +
-            "MEMORY:\n" +
-            "- You get all current plans as JSON. Keep them all unless the user " +
-            "abandons one. Preserve ids/createdAt. Mark steps done to track progress.\n\n" +
             "Return STRICT JSON only, no markdown, EXACTLY:\n" +
             "{\n" +
-            '  "reply": "<friendly message that lists THIS plan\'s steps readably, ' +
+            '  "reply": "<friendly message listing THIS plan\'s steps readably, ' +
             'grouped by your chosen phase labels, with a checkmark for done steps>",\n' +
-            '  "plans": [{"id":"<slug>","goal":"<goal>","timeframe":"<e.g. 23 days>",' +
-            '"targetDate":"<iso date or empty>","steps":[{"text":"<step>",' +
-            '"done":false,"phase":"<your label>"}],"createdAt":"<iso>",' +
-            '"updatedAt":"<iso>"}]\n' +
+            '  "action": "create" | "update" | "report",\n' +
+            '  "plan": {"id":"<slug or existing id>","goal":"<goal>",' +
+            '"timeframe":"<e.g. 23 days>","targetDate":"<iso date or empty>",' +
+            '"steps":[{"text":"<step>","done":false,"phase":"<your label>"}]} ' +
+            "| null\n" +
             "}";
 
         const user =
             `Today is ${human} (${nowIso}).\n\n` +
             `Recent conversation:\n${convo}\n\n` +
-            `Current plans (JSON):\n${JSON.stringify(existingPlans, null, 2)}` +
+            `Current plans (JSON, for context — do NOT re-emit these):\n` +
+            `${JSON.stringify(existingPlans, null, 2)}` +
             memoryNote(ctx) +
             `\n\nUser message: ${userText}\n\n` +
             `If the message is a vague follow-up ("ok and", "continue", "what ` +
             `next"), interpret it using the conversation + plans — usually it means ` +
-            `continue/expand the most recently discussed plan.\n` +
-            `Return the updated state as JSON.`;
+            `continue/expand the most recently discussed plan (an UPDATE).\n` +
+            `Return JSON for the single plan you acted on.`;
 
         let raw: string;
         try {
@@ -159,13 +160,20 @@ export class PlannerAgent implements Agent {
             };
         }
 
+        // Report-only turn, or a plan with no usable content: reply, change nothing.
+        const usable =
+            result.plan &&
+            (result.plan.goal || (Array.isArray(result.plan.steps) && result.plan.steps.length));
+
         return {
             contractVersion: CONTRACT_VERSION,
             from: this.name,
             status: "ok",
             message: result.reply,
-            data: { planCount: result.plans.length },
-            stateDelta: { plans: result.plans },
+            data: { action: result.action },
+            // The SERVER reads planUpsert, normalizes id/timestamps, and writes it
+            // to the PlanStore. Absent on report-only turns.
+            ...(usable ? { stateDelta: { planUpsert: result.plan } } : {}),
         };
     }
 
@@ -187,7 +195,13 @@ export class PlannerAgent implements Agent {
         }
         if (typeof obj !== "object" || obj === null) return null;
         const o = obj as Record<string, unknown>;
-        if (typeof o.reply !== "string" || !Array.isArray(o.plans)) return null;
-        return { reply: o.reply, plans: o.plans as Plan[] };
+        if (typeof o.reply !== "string") return null;
+        const action =
+            o.action === "create" || o.action === "update" || o.action === "report"
+                ? o.action
+                : "report";
+        const plan =
+            o.plan && typeof o.plan === "object" ? (o.plan as ProposedPlan) : null;
+        return { reply: o.reply, action, plan };
     }
 }

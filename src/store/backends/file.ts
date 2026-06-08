@@ -17,6 +17,7 @@ import { promises as fs } from "fs";
 import * as path from "path";
 import { Store } from "../store";
 import { MemoryStore, MemoryData, emptyMemory, applyMemoryDelta } from "../memoryStore";
+import { Plan, PlanStore } from "../planStore";
 import { newSessionId } from "../ids";
 import { UserStore, SessionStore, UpsertUserInput } from "../../auth/stores";
 import { User, Session, GoogleCredential, IntegrationCredential } from "../../auth/types";
@@ -213,5 +214,67 @@ export class FileMemoryStore implements MemoryStore {
         store[userId] = merged;
         await writeJson(this.file, store);
         return merged;
+    }
+}
+
+/* ----------------------------------- PLANS ----------------------------------- */
+
+/**
+ * FilePlanStore — plans live in ./data/plans.json as { [userId]: Plan[] }.
+ * Single-process dev backend: read-modify-write of one file. Serially safe for a
+ * single user; the per-document atomicity guarantee is the Firestore backend's.
+ */
+export class FilePlanStore implements PlanStore {
+    private file = path.join(DATA_DIR, "plans.json");
+
+    private async all(): Promise<Record<string, Plan[]>> {
+        return readJson<Record<string, Plan[]>>(this.file, {});
+    }
+
+    async listPlans(userId: string): Promise<Plan[]> {
+        const all = await this.all();
+        const list = all[userId] ?? [];
+        return [...list].sort((a, b) => (b.updatedAt || "").localeCompare(a.updatedAt || ""));
+    }
+
+    async getPlan(userId: string, planId: string): Promise<Plan | null> {
+        const all = await this.all();
+        return (all[userId] ?? []).find((p) => p.id === planId) ?? null;
+    }
+
+    async upsertPlan(userId: string, plan: Plan): Promise<Plan> {
+        const all = await this.all();
+        const list = all[userId] ?? [];
+        const idx = list.findIndex((p) => p.id === plan.id);
+        if (idx === -1) list.push(plan);
+        else list[idx] = plan;
+        all[userId] = list;
+        await writeJson(this.file, all);
+        return plan;
+    }
+
+    async setStepDone(
+        userId: string,
+        planId: string,
+        stepIndex: number,
+        done: boolean
+    ): Promise<Plan | null> {
+        const all = await this.all();
+        const list = all[userId] ?? [];
+        const plan = list.find((p) => p.id === planId);
+        if (!plan) return null;
+        if (stepIndex < 0 || stepIndex >= plan.steps.length) return plan;
+        plan.steps[stepIndex].done = done;
+        plan.updatedAt = nowIso();
+        all[userId] = list;
+        await writeJson(this.file, all);
+        return plan;
+    }
+
+    async deletePlan(userId: string, planId: string): Promise<void> {
+        const all = await this.all();
+        const list = all[userId] ?? [];
+        all[userId] = list.filter((p) => p.id !== planId);
+        await writeJson(this.file, all);
     }
 }

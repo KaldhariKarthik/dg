@@ -577,59 +577,12 @@
     <section id="screen-planner"
         class="screen relative z-10 min-h-screen pt-24 pb-32 px-margin-mobile max-w-md mx-auto">
         <section class="mb-8">
-            <h1 class="font-headline-lg text-headline-lg text-primary mb-1">Today's Plan</h1>
+            <h1 class="font-headline-lg text-headline-lg text-primary mb-1">Your Plans</h1>
             <p class="font-body-md text-on-surface-variant" id="planner-date">—</p>
         </section>
 
-        <section class="relative">
-            <div class="absolute left-1 top-0 bottom-0 w-px temporal-line opacity-30"></div>
-            <div class="space-y-6 ml-6">
-                <div class="glass-card bento-border rounded-card p-4">
-                    <div class="flex justify-between items-start mb-3">
-                        <span class="font-label-caps text-label-caps text-on-surface-variant">09:00 — 11:00</span>
-                        <span
-                            class="font-status-dot text-status-dot bg-white/5 px-2 py-1 rounded bento-border">FOCUS</span>
-                    </div>
-                    <h3 class="font-headline-md text-headline-md text-primary mb-2">Deep work block</h3>
-                    <p class="font-body-md text-on-surface-variant text-sm">Protected time for the deliverable due
-                        today.</p>
-                </div>
-
-                <div class="glass-card bento-border rounded-card p-4 border-l-2 border-l-secondary-container">
-                    <div class="flex justify-between items-start mb-3">
-                        <span class="font-label-caps text-label-caps text-secondary-fixed">14:00 — 15:00</span>
-                        <span
-                            class="font-status-dot text-status-dot bg-secondary-container/20 text-secondary-fixed px-2 py-1 rounded bento-border">CALL</span>
-                    </div>
-                    <h3 class="font-headline-md text-headline-md text-primary mb-2">Afternoon call</h3>
-                    <p class="font-body-md text-on-surface-variant text-sm">Bring the prepped notes from this morning.
-                    </p>
-                </div>
-
-                <!-- Conflict / at-risk card -->
-                <div
-                    class="bg-error-container/20 backdrop-blur-xl border border-error/30 rounded-card p-5 shadow-[0_0_30px_rgba(147,0,10,0.15)]">
-                    <div class="flex items-center gap-2 mb-3 text-error">
-                        <span class="material-symbols-outlined text-lg">warning</span>
-                        <span class="font-label-caps text-label-caps">DEADLINE AT RISK</span>
-                    </div>
-                    <h3 class="font-headline-md text-headline-md text-on-error-container mb-2">Deliverable due 6 PM</h3>
-                    <p class="font-body-md text-on-error-container/80 text-sm mb-4">The afternoon call leaves a tight
-                        window afterward. Moving 30 minutes of prep into the morning block keeps it comfortable.</p>
-                    <button
-                        class="w-full bg-primary text-on-primary py-3 rounded-xl font-label-caps text-label-caps flex items-center justify-center gap-2">
-                        REPLAN FOR ME <span class="material-symbols-outlined text-sm">auto_fix</span>
-                    </button>
-                </div>
-
-                <div class="glass-card bento-border rounded-card p-4 opacity-50">
-                    <div class="flex justify-between items-start mb-3"><span
-                            class="font-label-caps text-label-caps text-on-surface-variant">17:00 — 18:00</span></div>
-                    <h3 class="font-headline-md text-headline-md text-primary mb-2">Wrap & submit</h3>
-                    <p class="font-body-md text-on-surface-variant text-sm">Final review before the deadline.</p>
-                </div>
-            </div>
-        </section>
+        <!-- Live plans, rendered by renderPlanner() from GET /api/plans -->
+        <section id="plans-list" class="space-y-6"></section>
     </section>
 
     <!-- ============================================================= -->
@@ -814,10 +767,91 @@
             if (chatWrap) chatWrap.style.display = name === 'conversation' ? '' : 'none';
             window.scrollTo(0, 0);
             if (name === 'memory') fetchMemory();
+            if (name === 'planner') renderPlanner();
         }
         document.querySelectorAll('.navlink').forEach(n => {
             n.addEventListener('click', () => showScreen(n.dataset.screen));
         });
+
+        // ========== Planner (live plans) ==========
+        function escapeHtml(s) {
+            return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+        }
+
+        async function renderPlanner() {
+            const host = document.getElementById('plans-list');
+            if (!host) return;
+            host.innerHTML = '<p class="font-body-md text-on-surface-variant text-sm opacity-60">Loading…</p>';
+            let plans = [];
+            try {
+                const res = await fetch('/api/plans');
+                if (!res.ok) throw new Error('failed');
+                plans = (await res.json()).plans || [];
+            } catch (err) {
+                host.innerHTML = '<p class="font-body-md text-on-surface-variant text-sm">Could not load plans.</p>';
+                return;
+            }
+            if (!plans.length) {
+                host.innerHTML =
+                    '<div class="glass-card bento-border rounded-card p-6 text-center">' +
+                    '<p class="font-body-md text-on-surface-variant text-sm">No plans yet — tell DaVinci a goal.</p></div>';
+                return;
+            }
+            host.innerHTML = plans.map(planCardHtml).join('');
+        }
+
+        function planCardHtml(plan) {
+            const order = [], by = {};
+            (plan.steps || []).forEach((s, i) => {
+                const p = s.phase || '';
+                if (!(p in by)) { by[p] = []; order.push(p); }
+                by[p].push({ s, i });
+            });
+            const steps = order.map(p => {
+                const items = by[p].map(({ s, i }) =>
+                    `<label class="flex items-start gap-3 py-1.5 cursor-pointer">
+                        <input type="checkbox" ${s.done ? 'checked' : ''}
+                            onchange="toggleStep('${plan.id}', ${i}, this.checked)"
+                            style="accent-color:#ff571a" class="mt-1 w-4 h-4 shrink-0 cursor-pointer">
+                        <span class="font-body-md text-sm ${s.done ? 'line-through text-on-surface-variant opacity-60' : 'text-primary'}">${escapeHtml(s.text)}</span>
+                    </label>`).join('');
+                const header = p
+                    ? `<p class="font-label-caps text-label-caps text-on-surface-variant mt-3 mb-1">${escapeHtml(p)}</p>`
+                    : '';
+                return header + items;
+            }).join('');
+            const meta = [plan.timeframe, plan.targetDate].filter(Boolean).map(escapeHtml).join(' · ');
+            return `<div class="glass-card bento-border rounded-card p-4 mb-6">
+                <div class="flex items-start justify-between gap-3 mb-1">
+                    <h3 class="font-headline-md text-headline-md text-primary">${escapeHtml(plan.goal)}</h3>
+                    <button onclick="deletePlan('${plan.id}')" aria-label="Delete plan"
+                        class="text-on-surface-variant active:scale-90 transition-transform shrink-0">
+                        <span class="material-symbols-outlined text-lg">delete</span>
+                    </button>
+                </div>
+                ${meta ? `<p class="font-label-caps text-label-caps text-on-surface-variant mb-2">${meta}</p>` : ''}
+                ${steps}
+            </div>`;
+        }
+
+        async function toggleStep(planId, stepIndex, done) {
+            try {
+                await fetch('/api/plans/step', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ planId, stepIndex, done })
+                });
+            } catch (err) {
+                renderPlanner();
+            }
+        }
+
+        async function deletePlan(planId) {
+            try {
+                await fetch('/api/plans/' + encodeURIComponent(planId), { method: 'DELETE' });
+                renderPlanner();
+            } catch (err) { /* leave as-is */ }
+        }
 
         // ========== Memory fetch ==========
         async function fetchMemory() {

@@ -13,6 +13,7 @@
 
 import { Store } from "./store";
 import { MemoryStore } from "./memoryStore";
+import { PlanStore } from "./planStore";
 import { UserStore, SessionStore } from "../auth/stores";
 import { getFirestore } from "./firebase";
 import {
@@ -20,12 +21,14 @@ import {
     FileUserStore,
     FileSessionStore,
     FileMemoryStore,
+    FilePlanStore,
 } from "./backends/file";
 import {
     FirestoreUserStore,
     FirestoreSessionStore,
     FirestoreWorkingStore,
     FirestoreMemoryStore,
+    FirestorePlanStore,
 } from "./backends/firestore";
 
 export interface Stores {
@@ -33,6 +36,7 @@ export interface Stores {
     sessions: SessionStore;
     working: Store;
     memory: MemoryStore;
+    plans: PlanStore;
     backend: "firestore" | "file";
 }
 
@@ -47,6 +51,7 @@ export function buildStores(): Stores {
             sessions: new FirestoreSessionStore(db),
             working: new FirestoreWorkingStore(db),
             memory: new FirestoreMemoryStore(db),
+            plans: new FirestorePlanStore(db),
             backend: "firestore",
         };
     }
@@ -64,6 +69,7 @@ export function buildStores(): Stores {
         sessions: new FileSessionStore(),
         working: new FileStore(),
         memory: new FileMemoryStore(),
+        plans: new FilePlanStore(),
         backend: "file",
     };
 }

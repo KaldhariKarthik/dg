@@ -26,6 +26,7 @@ function buildStores() {
             sessions: new firestore_1.FirestoreSessionStore(db),
             working: new firestore_1.FirestoreWorkingStore(db),
             memory: new firestore_1.FirestoreMemoryStore(db),
+            plans: new firestore_1.FirestorePlanStore(db),
             backend: "firestore",
         };
     }
@@ -39,6 +40,7 @@ function buildStores() {
         sessions: new file_1.FileSessionStore(),
         working: new file_1.FileStore(),
         memory: new file_1.FileMemoryStore(),
+        plans: new file_1.FilePlanStore(),
         backend: "file",
     };
 }

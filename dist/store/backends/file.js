@@ -47,7 +47,7 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.FileMemoryStore = exports.FileSessionStore = exports.FileUserStore = exports.FileStore = void 0;
+exports.FilePlanStore = exports.FileMemoryStore = exports.FileSessionStore = exports.FileUserStore = exports.FileStore = void 0;
 const fs_1 = require("fs");
 const path = __importStar(require("path"));
 const memoryStore_1 = require("../memoryStore");
@@ -231,4 +231,58 @@ class FileMemoryStore {
     }
 }
 exports.FileMemoryStore = FileMemoryStore;
+/* ----------------------------------- PLANS ----------------------------------- */
+/**
+ * FilePlanStore — plans live in ./data/plans.json as { [userId]: Plan[] }.
+ * Single-process dev backend: read-modify-write of one file. Serially safe for a
+ * single user; the per-document atomicity guarantee is the Firestore backend's.
+ */
+class FilePlanStore {
+    file = path.join(DATA_DIR, "plans.json");
+    async all() {
+        return readJson(this.file, {});
+    }
+    async listPlans(userId) {
+        const all = await this.all();
+        const list = all[userId] ?? [];
+        return [...list].sort((a, b) => (b.updatedAt || "").localeCompare(a.updatedAt || ""));
+    }
+    async getPlan(userId, planId) {
+        const all = await this.all();
+        return (all[userId] ?? []).find((p) => p.id === planId) ?? null;
+    }
+    async upsertPlan(userId, plan) {
+        const all = await this.all();
+        const list = all[userId] ?? [];
+        const idx = list.findIndex((p) => p.id === plan.id);
+        if (idx === -1)
+            list.push(plan);
+        else
+            list[idx] = plan;
+        all[userId] = list;
+        await writeJson(this.file, all);
+        return plan;
+    }
+    async setStepDone(userId, planId, stepIndex, done) {
+        const all = await this.all();
+        const list = all[userId] ?? [];
+        const plan = list.find((p) => p.id === planId);
+        if (!plan)
+            return null;
+        if (stepIndex < 0 || stepIndex >= plan.steps.length)
+            return plan;
+        plan.steps[stepIndex].done = done;
+        plan.updatedAt = nowIso();
+        all[userId] = list;
+        await writeJson(this.file, all);
+        return plan;
+    }
+    async deletePlan(userId, planId) {
+        const all = await this.all();
+        const list = all[userId] ?? [];
+        all[userId] = list.filter((p) => p.id !== planId);
+        await writeJson(this.file, all);
+    }
+}
+exports.FilePlanStore = FilePlanStore;
 //# sourceMappingURL=file.js.map

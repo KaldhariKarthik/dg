@@ -12,7 +12,7 @@
  * for now; atomic per-field plan updates come in the planner step.
  */
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.FirestoreMemoryStore = exports.FirestoreWorkingStore = exports.FirestoreSessionStore = exports.FirestoreUserStore = void 0;
+exports.FirestorePlanStore = exports.FirestoreMemoryStore = exports.FirestoreWorkingStore = exports.FirestoreSessionStore = exports.FirestoreUserStore = void 0;
 const memoryStore_1 = require("../memoryStore");
 const ids_1 = require("../ids");
 const DEFAULT_SESSION_TTL_MS = 1000 * 60 * 60 * 24 * 14; // 14 days
@@ -195,4 +195,54 @@ class FirestoreMemoryStore {
     }
 }
 exports.FirestoreMemoryStore = FirestoreMemoryStore;
+/* ----------------------------------- PLANS ----------------------------------- */
+/**
+ * FirestorePlanStore — each plan is its own document under
+ * plans/{userId}/items/{planId}. Because a plan lives in its own doc, upsert /
+ * delete touch exactly that doc, and setStepDone runs as a single-document
+ * transaction — genuinely atomic. A check-off can no longer be clobbered by the
+ * orchestrator's working-state save, because plans aren't in the working bag.
+ */
+class FirestorePlanStore {
+    db;
+    constructor(db) {
+        this.db = db;
+    }
+    items(userId) {
+        return this.db.collection("plans").doc(userId).collection("items");
+    }
+    async listPlans(userId) {
+        const snap = await this.items(userId).get();
+        const plans = snap.docs.map((d) => d.data());
+        plans.sort((a, b) => (b.updatedAt || "").localeCompare(a.updatedAt || ""));
+        return plans;
+    }
+    async getPlan(userId, planId) {
+        const snap = await this.items(userId).doc(planId).get();
+        return snap.exists ? snap.data() : null;
+    }
+    async upsertPlan(userId, plan) {
+        await this.items(userId).doc(plan.id).set(plan);
+        return plan;
+    }
+    async setStepDone(userId, planId, stepIndex, done) {
+        const ref = this.items(userId).doc(planId);
+        return this.db.runTransaction(async (t) => {
+            const snap = await t.get(ref);
+            if (!snap.exists)
+                return null;
+            const plan = snap.data();
+            if (stepIndex < 0 || stepIndex >= plan.steps.length)
+                return plan;
+            plan.steps[stepIndex].done = done;
+            plan.updatedAt = nowIso();
+            t.set(ref, plan);
+            return plan;
+        });
+    }
+    async deletePlan(userId, planId) {
+        await this.items(userId).doc(planId).delete();
+    }
+}
+exports.FirestorePlanStore = FirestorePlanStore;
 //# sourceMappingURL=firestore.js.map

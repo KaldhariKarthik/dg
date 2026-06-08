@@ -132,11 +132,8 @@ const registry = new AgentRegistry();
 registry.register(new ResearcherAgent(gemini)); // real
 registry.register(new PlannerAgent(gemini)); // real
 registry.register(new ConversationalAgent(gemini)); // real
-<<<<<<< HEAD
 registry.register(new VisionAgent(gemini)); // real — scenes -> directives
-=======
 registry.register(new ExecutorAgent(gemini, gmailFactory, calendarFactory)); // real (Gmail + Calendar)
->>>>>>> 84a2de85db7bfdacb4cbf3212268a53a129d2a9d
 
 // LlmRouter is the brain; KeywordRouter stays available as a fallback class.
 const router: Router = new LlmRouter(gemini);

@@ -1,25 +1,21 @@
 "use strict";
-/**
- * ============================================================================
- *  core/types.ts  —  THE CONTRACT ("the socket")
- * ============================================================================
- *
- *  This file is the single most important file in the project.
- *
- *  Everything else (orchestrator, researcher, planner, executor, vision agent,
- *  the model provider, the adapters) is REPLACEABLE. This file is not.
- *
- *  The rule:
- *    - Editing an agent's internal logic        -> fine, do it daily.
- *    - Editing the shapes in THIS file          -> rare, deliberate, versioned.
- *
- *  CONTRACT_VERSION 1.1 (multi-user): Context.sessionId -> Context.userId.
- *  CONTRACT_VERSION 1.2 (memory): added MemoryData + optional Context.memory,
- *  the per-user profile the orchestrator loads each turn so agents can READ
- *  what's been learned about the user (additive; existing agents unaffected).
- * ============================================================================
- */
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.CONTRACT_VERSION = void 0;
+exports.VISION_SCHEMA_VERSION = exports.CONTRACT_VERSION = void 0;
 exports.CONTRACT_VERSION = "1.2";
+/* ----------------------------------------------------------------------------
+ *  VISION PERCEPTION SCHEMA (v1.0) — the single source of truth.
+ *
+ *  The perception edge (the browser client + the /api/vision model) emits a
+ *  structured observation; the vision agent consumes it and returns a directive.
+ *  These shapes used to be written down in four places (the model's system
+ *  prompt, the /api/vision response literal, the browser client, and the vision
+ *  agent) — exactly how schemas drift. They live HERE now so the client
+ *  (compiled by esbuild) and the server import ONE definition.
+ *
+ *  ADDITIVE: SceneInput.scene stays `unknown` at the agent boundary (we can't
+ *  force a model's output to be typed), so the agent CONTRACT is unchanged and
+ *  CONTRACT_VERSION stays 1.2. These types describe the vision envelope, which
+ *  carries its own `schema_version` ("1.0").
+ * ------------------------------------------------------------------------- */
+exports.VISION_SCHEMA_VERSION = "1.0";
 //# sourceMappingURL=types.js.map

@@ -3,8 +3,11 @@
     "version": "1.0.0",
     "main": "dist/server.js",
     "scripts": {
-        "dev": "tsx watch src/server.ts",
-        "build": "tsc",
+        "dev": "node scripts/dev.mjs",
+        "build": "tsc && npm run build:client",
+        "build:client": "npm run typecheck:client && npm run bundle:client",
+        "typecheck:client": "tsc -p client/tsconfig.json",
+        "bundle:client": "esbuild client/vision-client.ts --bundle --format=iife --outfile=public/vision-client.js --target=es2020 --sourcemap",
         "start": "node dist/server.js"
     },
     "dependencies": {
@@ -19,6 +22,7 @@
         "@types/cors": "^2.8.19",
         "@types/express": "^5.0.6",
         "@types/node": "^25.9.2",
+        "esbuild": "^0.28.0",
         "tsx": "^4.22.4",
         "typescript": "^6.0.3"
     }

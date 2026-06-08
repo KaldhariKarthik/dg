@@ -7,7 +7,8 @@
  *
  * Perception (the /api/vision model) DESCRIBES; this agent DECIDES. It never
  * sees raw pixels — only the structured scene — so it stays cheap and the two
- * concerns stay cleanly split.
+ * concerns stay cleanly split. The observation shape it reads is now the SHARED
+ * VisionObservation type from the contract (no private copy of the schema).
  *
  * Closed loop: the active `watch_for` condition is persisted in session state
  * (ctx.state.vision), so the SERVER is the source of truth across frames. Each
@@ -20,6 +21,10 @@ import {
     AgentResponse,
     Context,
     CONTRACT_VERSION,
+    VisionObservation,
+    VisionScene,
+    SceneObject,
+    SceneAnomaly,
 } from "../core/types";
 import { LLMProvider } from "../llm/provider";
 
@@ -53,8 +58,10 @@ export class VisionAgent implements Agent {
             };
         }
 
-        const env = (req.input.scene ?? {}) as any;
-        const scene = env.scene ?? {};
+        // The scene rides as `unknown` on the contract; here we read it as the
+        // shared v1.0 envelope (partial — a model can always omit a field).
+        const env = (req.input.scene ?? {}) as Partial<VisionObservation>;
+        const scene = (env.scene ?? {}) as Partial<VisionScene>;
         const transcript =
             req.input.text?.trim() ||
             (env.user_flags?.user_transcript ?? "").trim();
@@ -66,13 +73,13 @@ export class VisionAgent implements Agent {
         const objects = Array.isArray(scene.objects)
             ? scene.objects
                 .map(
-                    (o: any) =>
+                    (o: SceneObject) =>
                         `${o.label}${o.state ? ` (${o.state})` : ""}${o.position ? ` @ ${o.position}` : ""}`
                 )
                 .join(", ")
             : "";
         const anomalies = Array.isArray(scene.anomalies)
-            ? scene.anomalies.map((a: any) => `${a.type}: ${a.description}`).join("; ")
+            ? scene.anomalies.map((a: SceneAnomaly) => `${a.type}: ${a.description}`).join("; ")
             : "";
 
         const sceneText =

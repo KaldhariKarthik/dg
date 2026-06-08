@@ -117,3 +117,26 @@ export interface Agent {
     readonly name: AgentName;
     handle(req: AgentRequest, ctx: Context): Promise<AgentResponse>;
 }
+
+/* ----------------------------------------------------------------------------
+ *  TURN CLAIM — an optional capability, not part of the core Agent interface.
+ *
+ *  Some agents run multi-message interactions: the executor drafts an email and
+ *  waits for "yes / no / change it"; a future booking agent confirms a
+ *  reservation across turns. While such an interaction is open, the user's NEXT
+ *  message belongs to THAT agent — not to fresh routing.
+ *
+ *  Rather than let the router snoop an agent's private state to detect this (the
+ *  old leak: the router reading `state.emailDraft` etc.), an agent DECLARES it
+ *  by implementing TurnClaimant. The router learns only THAT a claim exists, and
+ *  whose — never what it's about. Agents with no cross-turn state (researcher,
+ *  conversational) simply don't implement this and pay nothing.
+ * ------------------------------------------------------------------------- */
+export interface TurnClaimant {
+    /**
+     * Return true if this agent holds an open interaction for this user that a
+     * follow-up message should be routed back to. MUST read only this agent's
+     * OWN state via ctx — never another agent's keys.
+     */
+    claimsTurn(input: AgentInput, ctx: Context): boolean | Promise<boolean>;
+}

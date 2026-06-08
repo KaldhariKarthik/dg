@@ -19,8 +19,10 @@ import {
     Agent,
     AgentRequest,
     AgentResponse,
+    AgentInput,
     Context,
     CONTRACT_VERSION,
+    TurnClaimant,
 } from "../core/types";
 import { LLMProvider } from "../llm/provider";
 import {
@@ -95,7 +97,7 @@ const EVENT_EDIT_KEY = "eventEdit";
 
 interface Composed { subject: string; body: string; }
 
-export class ExecutorAgent implements Agent {
+export class ExecutorAgent implements Agent, TurnClaimant {
     readonly name = "executor" as const;
 
     constructor(
@@ -103,6 +105,15 @@ export class ExecutorAgent implements Agent {
         private gmailFactory: GmailAdapterFactory,
         private calendarFactory: CalendarAdapterFactory
     ) { }
+
+    async claimsTurn(input: AgentInput, ctx: Context): Promise<boolean> {
+        if (input.kind !== "text") return false;
+        if (this.readEmail(ctx) || this.readEvent(ctx) || this.readEventEdit(ctx)) {
+            return true;
+        }
+        const last = this.readLastEvent(ctx);
+        return Boolean(last && this.looksLikeEdit(input.text));
+    }
 
     async handle(req: AgentRequest, ctx: Context): Promise<AgentResponse> {
         const userText =

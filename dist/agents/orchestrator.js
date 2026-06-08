@@ -49,12 +49,14 @@ class Orchestrator {
         const soFar = [];
         let steps = 0;
         let stopReason = "completed";
+        const claimedBy = await this.registry.resolveClaim(req.input, ctx);
         while (steps < maxSteps) {
             const decision = await this.router.decide({
                 input: req.input,
                 ctx,
                 soFar,
                 available: this.registry.available(),
+                claimedBy,
             });
             if (decision.action === "finish") {
                 // Guard: never finish having done nothing. If the router bails on the

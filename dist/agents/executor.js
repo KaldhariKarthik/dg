@@ -33,6 +33,15 @@ class ExecutorAgent {
         this.gmailFactory = gmailFactory;
         this.calendarFactory = calendarFactory;
     }
+    async claimsTurn(input, ctx) {
+        if (input.kind !== "text")
+            return false;
+        if (this.readEmail(ctx) || this.readEvent(ctx) || this.readEventEdit(ctx)) {
+            return true;
+        }
+        const last = this.readLastEvent(ctx);
+        return Boolean(last && this.looksLikeEdit(input.text));
+    }
     async handle(req, ctx) {
         const userText = req.input.kind === "text" ? req.input.text : req.input.text ?? "";
         // ---- Resume an open EMAIL draft ----------------------------------

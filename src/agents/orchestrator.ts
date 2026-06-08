@@ -25,14 +25,17 @@ import {
     Agent,
     AgentRequest,
     AgentResponse,
+    AgentInput,
     Context,
     CONTRACT_VERSION,
+    TurnClaimant,
 } from "../core/types";
 import { AgentRegistry } from "../core/registry";
 import { Router } from "../core/router";
 import { Synthesizer } from "../core/synthesizer";
 import { LLMProvider } from "../llm/provider";
 import { MemoryStore } from "../store/memoryStore";
+
 
 export interface OrchestratorOptions {
     /** Hard upper bound on agent calls per turn. The seatbelt. */
@@ -60,6 +63,7 @@ export class Orchestrator {
         const soFar: AgentResponse[] = [];
         let steps = 0;
         let stopReason = "completed";
+        const claimedBy = await this.registry.resolveClaim(req.input, ctx);
 
         while (steps < maxSteps) {
             const decision = await this.router.decide({
@@ -67,6 +71,7 @@ export class Orchestrator {
                 ctx,
                 soFar,
                 available: this.registry.available(),
+                claimedBy,
             });
 
             if (decision.action === "finish") {

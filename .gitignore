@@ -3,3 +3,4 @@ npm-debug.log
 .env
 .DS_Store
 data/
+firebase-credentials.json

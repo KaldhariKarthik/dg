@@ -40,17 +40,25 @@ interface ClientTaskContext {
     mode: string;
 }
 
+interface SessionInfo {
+    mode: "describe" | "guided";
+    planId: string | null;
+}
+
 interface VisionSnapshot {
     sessionId: string | null;
     taskContext: ClientTaskContext;
     watchFor: string | null;
     observations: VisionObservation[];
+    session: SessionInfo;
 }
 
 type Orchestrate = (
     observation: VisionObservation,
     snapshot: VisionSnapshot
 ) => Promise<VisionDirective | null>;
+
+type SessionEnd = (info: { planId: string | null; summaries: string[] }) => void;
 
 interface VisionInitOptions {
     videoEl: HTMLVideoElement;
@@ -63,6 +71,8 @@ interface VisionInitOptions {
     sessionId?: string;
     taskContext?: Partial<ClientTaskContext>;
     orchestrate?: Orchestrate;
+    /** 6D: fired when a GUIDED session ends (unsummon), with its scene log. */
+    onSessionEnd?: SessionEnd;
 }
 
 const VisionAgent = (() => {
@@ -93,6 +103,8 @@ const VisionAgent = (() => {
         pendingQuestion: null as string | null,
         pendingGuidance: null as string | null,
         consecutiveErrors: 0,
+        session: { mode: "describe", planId: null } as SessionInfo,
+        sessionLog: [] as string[], // 6D: scene summaries accrued during a guided session
     };
 
     let video: HTMLVideoElement;
@@ -103,6 +115,7 @@ const VisionAgent = (() => {
     let startEl: HTMLElement | null = null;
     let stopEl: HTMLElement | null = null;
     let orchestrate: Orchestrate | null = null;
+    let onSessionEnd: SessionEnd | null = null;
 
     let stream: MediaStream | null = null;
     let timer: ReturnType<typeof setTimeout> | null = null;
@@ -118,6 +131,7 @@ const VisionAgent = (() => {
         startEl = opts.startEl ?? null;
         stopEl = opts.stopEl ?? null;
         orchestrate = opts.orchestrate ?? null;
+        onSessionEnd = opts.onSessionEnd ?? null;
         state.sessionId =
             opts.sessionId ||
             "sess_" + (crypto.randomUUID ? crypto.randomUUID().slice(0, 6) : String(Date.now()));
@@ -167,6 +181,9 @@ const VisionAgent = (() => {
     }
 
     function stop(): void {
+        const endedGuided = state.session.mode === "guided";
+        const endedPlanId = state.session.planId;
+        const endedLog = state.sessionLog.slice();
         state.running = false;
         if (timer !== null) {
             clearTimeout(timer);
@@ -180,6 +197,8 @@ const VisionAgent = (() => {
         state.lastSig = null;
         state.pendingGuidance = null;
         state.consecutiveErrors = 0;
+        state.session = { mode: "describe", planId: null };
+        state.sessionLog = [];
         try {
             speechSynthesis.cancel();
         } catch {
@@ -189,6 +208,16 @@ const VisionAgent = (() => {
         if (stopEl) stopEl.classList.add("hidden");
         setVisionState("IDLE", false);
         if (guidanceEl) guidanceEl.style.opacity = "0";
+
+        // 6D: a guided session that just ended hands its scene log to the app,
+        // which extracts durable memory + speaks a recap. Fire-and-forget.
+        if (endedGuided && onSessionEnd) {
+            try {
+                onSessionEnd({ planId: endedPlanId, summaries: endedLog });
+            } catch {
+                /* no-op */
+            }
+        }
     }
 
     // Cheap perceptual signature: tiny grayscale snapshot of the current frame.
@@ -305,6 +334,15 @@ const VisionAgent = (() => {
             state.observations.push(obs);
             if (state.observations.length > CONFIG.sceneMemory) state.observations.shift();
 
+            // 6D: accrue the guided session's scene story for end-of-session memory.
+            if (state.session.mode === "guided") {
+                const sum = obs.scene?.summary?.trim();
+                if (sum && sum !== state.sessionLog[state.sessionLog.length - 1]) {
+                    state.sessionLog.push(sum);
+                    if (state.sessionLog.length > 20) state.sessionLog.shift();
+                }
+            }
+
             // Perception is pure description — the orchestrator decides what to say.
             const interrupt = !!question; // an explicit ask preempts current speech
             if (orchestrate) {
@@ -341,6 +379,22 @@ const VisionAgent = (() => {
         if (!q || !state.running) return;
         state.pendingQuestion = q;
         schedule(0);
+    }
+
+    // Set the session mode without touching the camera (e.g. elevate mid-stream).
+    function setSession(mode: "describe" | "guided", planId: string | null = null): void {
+        if (mode === "guided") state.sessionLog = [];
+        state.session = { mode, planId };
+    }
+
+    // Start (or elevate to) a guided session bound to one plan, summoning the
+    // camera if it isn't already live. The actual plan grounding happens server
+    // side — the client just declares "this session is guiding plan X".
+    function startGuided(planId: string): void {
+        state.sessionLog = [];
+        state.session = { mode: "guided", planId };
+        if (!state.running) void start();
+        else schedule(0);
     }
 
     function speakGuide(text: string, interrupt = false): void {
@@ -398,10 +452,11 @@ const VisionAgent = (() => {
             taskContext: { ...state.taskContext },
             watchFor: state.watchFor,
             observations: state.observations.slice(),
+            session: { ...state.session },
         };
     }
 
-    return { init, start, stop, ask, setTaskContext, snapshot, CONFIG };
+    return { init, start, stop, ask, setSession, startGuided, setTaskContext, snapshot, CONFIG };
 })();
 
 declare global {

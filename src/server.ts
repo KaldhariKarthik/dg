@@ -22,7 +22,7 @@ import express, { Request, Response } from "express";
 import cors from "cors";
 import { randomBytes } from "crypto";
 import { GoogleGenAI } from "@google/genai";
-import { AgentRequest, Context, CONTRACT_VERSION } from "./core/types";
+import { AgentRequest, Context, CONTRACT_VERSION, MemoryData } from "./core/types";
 import { AgentRegistry } from "./core/registry";
 import { KeywordRouter, LlmRouter, Router } from "./core/router";
 import { Orchestrator } from "./agents/orchestrator";
@@ -49,11 +49,11 @@ import {
     SESSION_COOKIE,
 } from "./auth/middleware";
 import { buildStores } from "./store/factory";
-import { ProposedPlan, normalizePlan } from "./store/planStore";
+import { Plan, ProposedPlan, normalizePlan } from "./store/planStore";
 
 // --- config -----------------------------------------------------------------
 const PORT = process.env.PORT ? Number(process.env.PORT) : 8080;
-const apiKey = process.env.GEMINI_API_KEY ?? process.env.API_KEY;
+const apiKey = (process.env.GEMINI_API_KEY ?? process.env.API_KEY ?? "").trim();
 
 const VISION_MODEL_FAST = "gemini-3.1-flash-lite";
 const VISION_MODEL_DEEP = "gemini-3.5-flash";
@@ -65,9 +65,9 @@ if (!apiKey) {
 
 // Multi-user REQUIRES Google login, so Google OAuth must be configured.
 const googleCfg = {
-    clientId: process.env.GOOGLE_CLIENT_ID ?? "",
-    clientSecret: process.env.GOOGLE_CLIENT_SECRET ?? "",
-    redirectUri: process.env.GOOGLE_REDIRECT_URI ?? "",
+    clientId: (process.env.GOOGLE_CLIENT_ID ?? "").trim(),
+    clientSecret: (process.env.GOOGLE_CLIENT_SECRET ?? "").trim(),
+    redirectUri: (process.env.GOOGLE_REDIRECT_URI ?? "").trim(),
 };
 if (!googleCfg.clientId || !googleCfg.clientSecret || !googleCfg.redirectUri) {
     console.error(
@@ -210,14 +210,26 @@ app.get("/api/memory", requireAuth, async (req: Request, res: Response) => {
  * fumbled generation can't drift an id or erase createdAt. Then strip plan keys
  * from the working bag: plans live only in the PlanStore, never the bag.
  */
-async function commitPlanUpsert(ctx: Context, userId: string): Promise<void> {
+async function commitPlanUpsert(ctx: Context, userId: string): Promise<string | null> {
     const proposed = ctx.state.planUpsert as ProposedPlan | undefined;
+    let committedId: string | null = null;
     if (proposed && typeof proposed === "object") {
         const existing = proposed.id ? await plans.getPlan(userId, proposed.id) : null;
-        await plans.upsertPlan(userId, normalizePlan(proposed, existing));
+        const normalized = normalizePlan(proposed, existing);
+        await plans.upsertPlan(userId, normalized);
+        committedId = normalized.id;
     }
     delete ctx.state.planUpsert;
     delete ctx.state.plans;
+    delete ctx.state.sessionMode;
+    delete ctx.state.activePlan;
+    return committedId;
+}
+
+function isPhysicalTask(plan: ProposedPlan): boolean {
+    const text = [plan.goal ?? "", ...(Array.isArray(plan.steps) ? plan.steps.map((s) => s.text) : [])]
+        .join(" ").toLowerCase();
+    return /\b(cook|bake|fry|grill|roast|knead|chop|brew|make|prepare|assemble|build|install|mount|fix|repair|replace|wire|paint|sand|drill|screw|glue|sew|knit|fold|plant|pot|repot|water|clean|wash|set ?up|craft|draw|sketch|wrap|tie)\b/.test(text);
 }
 
 // GET /api/plans — the current user's live plans (most-recently-updated first).
@@ -424,12 +436,27 @@ app.post("/api/vision", requireAuth, async (req: Request, res: Response) => {
 // POST /api/orchestrate ------------------------------------------------------
 app.post("/api/orchestrate", requireAuth, async (req: Request, res: Response) => {
     try {
-        const { observation } = req.body as { observation?: any };
+        const { observation, session } = req.body as {
+            observation?: any;
+            session?: { mode?: string; planId?: string };
+        };
         if (!observation) return res.status(400).json({ error: "observation is required." });
 
         const userId = req.userId!;
         const state = await store.load(userId);
         state.plans = await plans.listPlans(userId);
+
+        // Guided session: bind the active plan so the vision agent reasons against
+        // it. Injected into ctx.state like plans; stripped after the turn by
+        // commitPlanUpsert. A plain "describe" session injects nothing.
+        if (session?.mode === "guided") {
+            state.sessionMode = "guided";
+            if (session.planId) {
+                const active = (state.plans as Plan[]).find((p) => p.id === session.planId);
+                if (active) state.activePlan = active;
+            }
+        }
+
         const transcript = observation?.user_flags?.user_transcript || undefined;
 
         const ctx: Context = {

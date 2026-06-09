@@ -474,6 +474,18 @@
                     </div>
                 </div>
 
+                <!-- Guided session banner (6B) -->
+                <div id="guided-banner" class="absolute top-16 left-6 right-6 hidden">
+                    <div class="glass-panel bento-border px-4 py-2 rounded-2xl flex items-center gap-2">
+                        <span class="material-symbols-outlined text-secondary text-base"
+                            style="font-variation-settings:'FILL' 1;">checklist</span>
+                        <span id="guided-goal" class="font-body-md text-sm text-on-surface truncate flex-1"></span>
+                        <span id="guided-flash"
+                            class="font-label-caps text-label-caps text-secondary opacity-0 transition-opacity duration-300">✓
+                            done</span>
+                    </div>
+                </div>
+
                 <!-- Guidance caption strip (this is where orchestrator speech will render) -->
                 <div class="absolute bottom-44 left-6 right-6">
                     <div id="guidance"
@@ -761,7 +773,10 @@
             document.querySelectorAll('.navlink').forEach(n => {
                 n.classList.toggle('active-nav', n.dataset.screen === name);
             });
-            if (name !== 'vision' && window.VisionAgent) VisionAgent.stop();
+            if (name !== 'vision' && window.VisionAgent) {
+                VisionAgent.stop();
+                hideGuidedBanner();
+            }
             // Show/hide chat input bar only on conversation screen
             const chatWrap = document.getElementById('chat-input-wrap');
             if (chatWrap) chatWrap.style.display = name === 'conversation' ? '' : 'none';
@@ -831,6 +846,11 @@
                 </div>
                 ${meta ? `<p class="font-label-caps text-label-caps text-on-surface-variant mb-2">${meta}</p>` : ''}
                 ${steps}
+                <button onclick="startGuidedSession('${plan.id}')"
+                    class="mt-4 w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-secondary-container/15 border border-secondary-container/30 text-secondary font-label-caps text-label-caps tracking-widest active:scale-95 transition-transform">
+                    <span class="material-symbols-outlined text-base" style="font-variation-settings:'FILL' 1;">videocam</span>
+                    Guide me
+                </button>
             </div>`;
         }
 
@@ -851,6 +871,58 @@
                 await fetch('/api/plans/' + encodeURIComponent(planId), { method: 'DELETE' });
                 renderPlanner();
             } catch (err) { /* leave as-is */ }
+        }
+
+        // Launch a guided vision session for a plan: jump to the camera and bind it.
+        async function startGuidedSession(planId) {
+            showScreen('vision');
+            if (window.VisionAgent) VisionAgent.startGuided(planId);
+            showGuidedBanner(planId);
+        }
+
+        async function showGuidedBanner(planId) {
+            const banner = document.getElementById('guided-banner');
+            const goalEl = document.getElementById('guided-goal');
+            if (!banner || !goalEl) return;
+            goalEl.textContent = 'Guiding you…';
+            banner.classList.remove('hidden');
+            try {
+                const res = await fetch('/api/plans');
+                const plans = res.ok ? (await res.json()).plans || [] : [];
+                const plan = plans.find(p => p.id === planId);
+                if (plan) goalEl.textContent = 'Guiding: ' + plan.goal;
+            } catch (e) { }
+        }
+
+        function hideGuidedBanner() {
+            const b = document.getElementById('guided-banner');
+            if (b) b.classList.add('hidden');
+        }
+
+        function handleStepChecked(planId, index) {
+            const planner = document.getElementById('screen-planner');
+            if (planner && planner.classList.contains('active')) renderPlanner();
+            const flash = document.getElementById('guided-flash');
+            if (flash) { flash.style.opacity = '1'; setTimeout(() => { flash.style.opacity = '0'; }, 1600); }
+        }
+
+        function showRecap(text) {
+            const g = document.getElementById('guidance');
+            if (g) { g.textContent = text; g.style.opacity = '1'; }
+            try { const u = new SpeechSynthesisUtterance(text); speechSynthesis.speak(u); } catch (e) { }
+        }
+
+        function appendOfferChip(offer) {
+            const wrap = document.createElement('div');
+            wrap.className = 'flex flex-col gap-2 max-w-[85%]';
+            wrap.innerHTML = `
+                <button onclick="startGuidedSession('${offer.planId}')"
+                    class="flex items-center gap-3 p-4 rounded-xl bg-secondary-container/15 border border-secondary-container/30 text-left active:scale-95 transition-transform">
+                    <span class="material-symbols-outlined text-secondary" style="font-variation-settings:'FILL' 1;">videocam</span>
+                    <span class="font-body-md text-sm text-on-surface">${offer.prompt}</span>
+                </button>`;
+            transcript.appendChild(wrap);
+            scrollToBottom();
         }
 
         // ========== Memory fetch ==========
@@ -1040,6 +1112,8 @@
                     // Update history for multi-turn
                     chatHistory.push({ role: 'user', parts: [{ text }] });
                     chatHistory.push({ role: 'model', parts: [{ text: data.reply }] });
+
+                    if (data.offer && data.offer.planId) appendOfferChip(data.offer);
                 }
             } catch (err) {
                 removeTyping();
@@ -1078,13 +1152,32 @@
                 const r = await fetch('/api/orchestrate', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ session_id: snapshot.sessionId, observation }),
+                    body: JSON.stringify({ session_id: snapshot.sessionId, observation, session: snapshot.session }),
                 });
-                return r.ok ? r.json() : null;
+                if (!r.ok) return null;
+                const directive = await r.json();
+                if (directive && directive.step_checked != null) {
+                    handleStepChecked(snapshot.session.planId, directive.step_checked);
+                }
+                return directive;
+            },
+            onSessionEnd: async ({ planId, summaries }) => {
+                try {
+                    const r = await fetch('/api/vision/session/end', {
+                        method: 'POST', headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ planId, summaries }),
+                    });
+                    if (!r.ok) return;
+                    const data = await r.json();
+                    if (data && data.recap) showRecap(data.recap);
+                } catch (e) { }
             },
         });
         document.getElementById('startBtn').addEventListener('click', () => VisionAgent.start());
-        document.getElementById('stopBtn').addEventListener('click', () => VisionAgent.stop());
+        document.getElementById('stopBtn').addEventListener('click', () => {
+            VisionAgent.stop();
+            hideGuidedBanner();
+        });
         (function () {
             const vq = document.getElementById('vision-question');
             const ask = () => { VisionAgent.ask(vq.value.trim()); vq.value = ''; };

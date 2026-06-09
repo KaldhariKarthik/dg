@@ -35,7 +35,10 @@
       watchFor: null,
       pendingQuestion: null,
       pendingGuidance: null,
-      consecutiveErrors: 0
+      consecutiveErrors: 0,
+      session: { mode: "describe", planId: null },
+      sessionLog: []
+      // 6D: scene summaries accrued during a guided session
     };
     let video;
     let guidanceEl;
@@ -45,6 +48,7 @@
     let startEl = null;
     let stopEl = null;
     let orchestrate = null;
+    let onSessionEnd = null;
     let stream = null;
     let timer = null;
     const diffCanvas = document.createElement("canvas");
@@ -58,6 +62,7 @@
       startEl = opts.startEl ?? null;
       stopEl = opts.stopEl ?? null;
       orchestrate = opts.orchestrate ?? null;
+      onSessionEnd = opts.onSessionEnd ?? null;
       state.sessionId = opts.sessionId || "sess_" + (crypto.randomUUID ? crypto.randomUUID().slice(0, 6) : String(Date.now()));
       if (opts.taskContext) state.taskContext = { ...state.taskContext, ...opts.taskContext };
       diffCanvas.width = diffCanvas.height = CONFIG.diffSize;
@@ -101,6 +106,9 @@
       }
     }
     function stop() {
+      const endedGuided = state.session.mode === "guided";
+      const endedPlanId = state.session.planId;
+      const endedLog = state.sessionLog.slice();
       state.running = false;
       if (timer !== null) {
         clearTimeout(timer);
@@ -114,6 +122,8 @@
       state.lastSig = null;
       state.pendingGuidance = null;
       state.consecutiveErrors = 0;
+      state.session = { mode: "describe", planId: null };
+      state.sessionLog = [];
       try {
         speechSynthesis.cancel();
       } catch {
@@ -122,6 +132,12 @@
       if (stopEl) stopEl.classList.add("hidden");
       setVisionState("IDLE", false);
       if (guidanceEl) guidanceEl.style.opacity = "0";
+      if (endedGuided && onSessionEnd) {
+        try {
+          onSessionEnd({ planId: endedPlanId, summaries: endedLog });
+        } catch {
+        }
+      }
     }
     function frameSignature() {
       if (!video.videoWidth) return null;
@@ -215,6 +231,13 @@
         state.pendingQuestion = null;
         state.observations.push(obs);
         if (state.observations.length > CONFIG.sceneMemory) state.observations.shift();
+        if (state.session.mode === "guided") {
+          const sum = obs.scene?.summary?.trim();
+          if (sum && sum !== state.sessionLog[state.sessionLog.length - 1]) {
+            state.sessionLog.push(sum);
+            if (state.sessionLog.length > 20) state.sessionLog.shift();
+          }
+        }
         const interrupt = !!question;
         if (orchestrate) {
           const directive = await orchestrate(obs, snapshot());
@@ -246,6 +269,16 @@
       if (!q || !state.running) return;
       state.pendingQuestion = q;
       schedule(0);
+    }
+    function setSession(mode, planId = null) {
+      if (mode === "guided") state.sessionLog = [];
+      state.session = { mode, planId };
+    }
+    function startGuided(planId) {
+      state.sessionLog = [];
+      state.session = { mode: "guided", planId };
+      if (!state.running) void start();
+      else schedule(0);
     }
     function speakGuide(text, interrupt = false) {
       if (!text || text === state.lastSpoken) return;
@@ -293,10 +326,11 @@
         sessionId: state.sessionId,
         taskContext: { ...state.taskContext },
         watchFor: state.watchFor,
-        observations: state.observations.slice()
+        observations: state.observations.slice(),
+        session: { ...state.session }
       };
     }
-    return { init, start, stop, ask, setTaskContext, snapshot, CONFIG };
+    return { init, start, stop, ask, setSession, startGuided, setTaskContext, snapshot, CONFIG };
   })();
   window.VisionAgent = VisionAgent;
 })();

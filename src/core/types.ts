@@ -152,4 +152,6 @@ export interface VisionDirective {
     done_message: string;
     /** Rare: the orchestrator may nudge task/mode. */
     task_context?: Partial<VisionTaskContext>;
+    /** 6B: index of a plan step the server just checked off this turn (guided). */
+    step_checked?: number | null;
 }

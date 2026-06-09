@@ -46,7 +46,7 @@ const factory_1 = require("./store/factory");
 const planStore_1 = require("./store/planStore");
 // --- config -----------------------------------------------------------------
 const PORT = process.env.PORT ? Number(process.env.PORT) : 8080;
-const apiKey = process.env.GEMINI_API_KEY ?? process.env.API_KEY;
+const apiKey = (process.env.GEMINI_API_KEY ?? process.env.API_KEY ?? "").trim();
 const VISION_MODEL_FAST = "gemini-3.1-flash-lite";
 const VISION_MODEL_DEEP = "gemini-3.5-flash";
 if (!apiKey) {
@@ -55,9 +55,9 @@ if (!apiKey) {
 }
 // Multi-user REQUIRES Google login, so Google OAuth must be configured.
 const googleCfg = {
-    clientId: process.env.GOOGLE_CLIENT_ID ?? "",
-    clientSecret: process.env.GOOGLE_CLIENT_SECRET ?? "",
-    redirectUri: process.env.GOOGLE_REDIRECT_URI ?? "",
+    clientId: (process.env.GOOGLE_CLIENT_ID ?? "").trim(),
+    clientSecret: (process.env.GOOGLE_CLIENT_SECRET ?? "").trim(),
+    redirectUri: (process.env.GOOGLE_REDIRECT_URI ?? "").trim(),
 };
 if (!googleCfg.clientId || !googleCfg.clientSecret || !googleCfg.redirectUri) {
     console.error("[fatal] Google OAuth not configured. Multi-user login needs " +
@@ -185,12 +185,23 @@ app.get("/api/memory", middleware_1.requireAuth, async (req, res) => {
  */
 async function commitPlanUpsert(ctx, userId) {
     const proposed = ctx.state.planUpsert;
+    let committedId = null;
     if (proposed && typeof proposed === "object") {
         const existing = proposed.id ? await plans.getPlan(userId, proposed.id) : null;
-        await plans.upsertPlan(userId, (0, planStore_1.normalizePlan)(proposed, existing));
+        const normalized = (0, planStore_1.normalizePlan)(proposed, existing);
+        await plans.upsertPlan(userId, normalized);
+        committedId = normalized.id;
     }
     delete ctx.state.planUpsert;
     delete ctx.state.plans;
+    delete ctx.state.sessionMode;
+    delete ctx.state.activePlan;
+    return committedId;
+}
+function isPhysicalTask(plan) {
+    const text = [plan.goal ?? "", ...(Array.isArray(plan.steps) ? plan.steps.map((s) => s.text) : [])]
+        .join(" ").toLowerCase();
+    return /\b(cook|bake|fry|grill|roast|knead|chop|brew|make|prepare|assemble|build|install|mount|fix|repair|replace|wire|paint|sand|drill|screw|glue|sew|knit|fold|plant|pot|repot|water|clean|wash|set ?up|craft|draw|sketch|wrap|tie)\b/.test(text);
 }
 // GET /api/plans — the current user's live plans (most-recently-updated first).
 app.get("/api/plans", middleware_1.requireAuth, async (req, res) => {
@@ -362,12 +373,23 @@ app.post("/api/vision", middleware_1.requireAuth, async (req, res) => {
 // POST /api/orchestrate ------------------------------------------------------
 app.post("/api/orchestrate", middleware_1.requireAuth, async (req, res) => {
     try {
-        const { observation } = req.body;
+        const { observation, session } = req.body;
         if (!observation)
             return res.status(400).json({ error: "observation is required." });
         const userId = req.userId;
         const state = await store.load(userId);
         state.plans = await plans.listPlans(userId);
+        // Guided session: bind the active plan so the vision agent reasons against
+        // it. Injected into ctx.state like plans; stripped after the turn by
+        // commitPlanUpsert. A plain "describe" session injects nothing.
+        if (session?.mode === "guided") {
+            state.sessionMode = "guided";
+            if (session.planId) {
+                const active = state.plans.find((p) => p.id === session.planId);
+                if (active)
+                    state.activePlan = active;
+            }
+        }
         const transcript = observation?.user_flags?.user_transcript || undefined;
         const ctx = {
             userId,

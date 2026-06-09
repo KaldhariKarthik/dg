@@ -125,17 +125,26 @@ export class Orchestrator {
 
         const response = await this.assemble(req, soFar, stopReason);
 
-        // Extract + merge memory in the background (non-blocking).
-        this.updateMemory(ctx, soFar).catch((err) =>
-            console.error("[memory] Background update failed:", err)
-        );
+        // Fix 2: AWAIT the memory update. It used to be fire-and-forget, but on
+        // Cloud Run with default CPU throttling, work kicked off AFTER the response
+        // is sent may never run — silently dropping everything DaVinci learns.
+        // updateMemory swallows its own errors (try/catch within), so awaiting it
+        // can never break the turn; it only adds the extraction latency (one LLM
+        // call) to SUBSTANTIVE chat turns. Vision/orchestrate turns pass an empty
+        // history, so updateMemory returns immediately and the fast path is
+        // unaffected. (If you later run Cloud Run with --no-cpu-throttling or
+        // min-instances>=1, you can move this back to fire-and-forget for snappier
+        // chat replies.)
+        await this.updateMemory(ctx, soFar);
 
         return response;
     }
 
     /**
      * Extract NEW durable items from the turn and merge them atomically. Skips
-     * filler turns and no-op deltas so memory stays meaningful and cheap.
+     * filler turns and no-op deltas so memory stays meaningful and cheap. Never
+     * throws — all failures are logged and swallowed so the caller can await it
+     * safely.
      */
     private async updateMemory(ctx: Context, soFar: AgentResponse[]): Promise<void> {
         try {

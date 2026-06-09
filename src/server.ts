@@ -11,11 +11,22 @@
  *   GET  /api/auth/google/callback  -> verify, upsert user, mint session
  *   POST /api/auth/logout           -> revoke session
  *   GET  /api/me                    -> current user + connected capabilities
- *   POST /api/chat        (auth)    -> { message } -> { reply }
+ *   POST /api/chat        (auth)    -> { message } -> { reply, offer? }
  *   POST /api/vision      (auth)    -> { image, tier?, ... } -> v1.0 envelope
  *   POST /api/orchestrate (auth)    -> { observation } -> directive (+ step_checked)
  *   POST /api/vision/session/end (auth) -> { planId, summaries } -> { recap }
  *   static public/
+ *
+ * Stability fixes folded in here:
+ *   Fix 3 — per-user rate limits on /api/vision and /api/orchestrate (the model
+ *           endpoints the untrusted client polls).
+ *   Fix 4 — CORS pinned to a configured origin instead of reflecting any origin
+ *           with credentials.
+ *   Fix 5 — the "guide me with the camera" offer is now actually emitted from
+ *           /api/chat when a hands-on plan is created/updated (isPhysicalTask was
+ *           dead code; the frontend already listens for `offer.planId`).
+ *   Fix 6 — the direct vision generateContent call is wrapped in withTimeout (the
+ *           rest of the model calls go through GeminiProvider, already wrapped).
  */
 
 import "dotenv/config";
@@ -51,6 +62,8 @@ import {
 } from "./auth/middleware";
 import { buildStores } from "./store/factory";
 import { Plan, ProposedPlan, normalizePlan } from "./store/planStore";
+import { rateLimitPerUser } from "./middleware/rateLimit";
+import { withTimeout } from "./util/withTimeout";
 
 // --- config -----------------------------------------------------------------
 const PORT = process.env.PORT ? Number(process.env.PORT) : 8080;
@@ -58,6 +71,12 @@ const apiKey = (process.env.GEMINI_API_KEY ?? process.env.API_KEY ?? "").trim();
 
 const VISION_MODEL_FAST = "gemini-3.1-flash-lite";
 const VISION_MODEL_DEEP = "gemini-3.5-flash";
+const VISION_TIMEOUT_MS = 25_000;
+
+// Fix 4: the app is served same-origin (express.static below), so cross-origin
+// requests are not needed for normal use. Default to no cross-origin access;
+// set APP_ORIGIN to explicitly allow one origin (e.g. a separate front-end host).
+const appOrigin = (process.env.APP_ORIGIN ?? "").trim();
 
 if (!apiKey) {
     console.error("[fatal] No API key (set API_KEY or GEMINI_API_KEY).");
@@ -111,10 +130,25 @@ const orchestrator = new Orchestrator(registry, router, synth, gemini, memorySto
 
 const visionAI = new GoogleGenAI({ apiKey });
 
+// Fix 3: per-user limiters for the model-backed vision endpoints. Generous
+// enough not to break a legitimately fast scene (the client only SENDS on a
+// changed frame), tight enough to bound a runaway/abusive client's spend.
+// Tunable via env. Each endpoint gets its own budget since they're called ~1:1.
+const VISION_RATE_MAX = Number(process.env.VISION_RATE_MAX ?? 120);
+const visionLimit = rateLimitPerUser({ max: VISION_RATE_MAX, windowMs: 60_000, name: "vision" });
+const orchestrateLimit = rateLimitPerUser({ max: VISION_RATE_MAX, windowMs: 60_000, name: "vision" });
+
 // --- app --------------------------------------------------------------------
 const app = express();
 app.use(express.json({ limit: "10mb" }));
-app.use(cors({ origin: true, credentials: true })); // same-origin app; credentials for cookies
+// Fix 4: pin CORS. With a same-origin front-end no cross-origin access is needed,
+// so the default is to allow none; APP_ORIGIN opens exactly one origin.
+app.use(
+    cors({
+        origin: appOrigin || false,
+        credentials: true,
+    })
+);
 app.use(makeAttachUser(sessions)); // populates req.userId from the session cookie
 app.use(express.static("public"));
 
@@ -210,6 +244,9 @@ app.get("/api/memory", requireAuth, async (req: Request, res: Response) => {
  * into the PlanStore — the SERVER owns id + timestamps via normalizePlan, so a
  * fumbled generation can't drift an id or erase createdAt. Then strip plan keys
  * from the working bag: plans live only in the PlanStore, never the bag.
+ *
+ * Returns the committed plan id (or null on a report-only turn) so the caller
+ * can decide whether to offer a camera-guided session for it.
  */
 async function commitPlanUpsert(ctx: Context, userId: string): Promise<string | null> {
     const proposed = ctx.state.planUpsert as ProposedPlan | undefined;
@@ -317,11 +354,31 @@ app.post("/api/chat", requireAuth, async (req: Request, res: Response) => {
 
         const result = await orchestrator.run(agentReq, ctx);
 
-        await commitPlanUpsert(ctx, userId);
+        const committedPlanId = await commitPlanUpsert(ctx, userId);
         ctx.state.conversation = ctx.history.slice(-40);
         await store.save(userId, ctx.state);
 
-        res.json({ reply: result.message });
+        // Fix 5: if we just created/updated a hands-on, physical plan, offer to
+        // guide it with the camera (the planning -> vision bridge). The frontend
+        // listens for `offer.planId` and renders a "guide me with the camera"
+        // chip. committedPlanId is null on report-only turns, so the offer only
+        // fires when a plan was actually written.
+        let offer: { planId: string; prompt: string } | undefined;
+        if (committedPlanId) {
+            try {
+                const plan = await plans.getPlan(userId, committedPlanId);
+                if (plan && isPhysicalTask(plan)) {
+                    offer = {
+                        planId: plan.id,
+                        prompt: `Want me to guide you through "${plan.goal}" with the camera?`,
+                    };
+                }
+            } catch (e) {
+                console.error("[chat] offer check failed:", e);
+            }
+        }
+
+        res.json({ reply: result.message, ...(offer ? { offer } : {}) });
     } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         console.error("Chat error:", msg);
@@ -360,7 +417,7 @@ Rules:
 - If "task" is not provided in context, infer it from the scene. Echo "mode" as given (default "observe").
 - Salient objects only. Keep every string short.`;
 
-app.post("/api/vision", requireAuth, async (req: Request, res: Response) => {
+app.post("/api/vision", requireAuth, visionLimit, async (req: Request, res: Response) => {
     try {
         const {
             image, tier, task_context, user_transcript, recent, media_meta,
@@ -386,22 +443,27 @@ app.post("/api/vision", requireAuth, async (req: Request, res: Response) => {
         const prompt = [ctxLine, qLine, "Return only the JSON object from your instructions."].join("\n");
         const base64Data = image.replace(/^data:image\/\w+;base64,/, "");
 
-        const response = await visionAI.models.generateContent({
-            model: modelName,
-            contents: [
-                {
-                    role: "user",
-                    parts: [
-                        { text: prompt },
-                        { inlineData: { mimeType: "image/jpeg", data: base64Data } },
-                    ],
+        // Fix 6: hard timeout on the direct vision model call.
+        const response = await withTimeout(
+            visionAI.models.generateContent({
+                model: modelName,
+                contents: [
+                    {
+                        role: "user",
+                        parts: [
+                            { text: prompt },
+                            { inlineData: { mimeType: "image/jpeg", data: base64Data } },
+                        ],
+                    },
+                ],
+                config: {
+                    systemInstruction: VISION_SYSTEM,
+                    responseMimeType: "application/json",
                 },
-            ],
-            config: {
-                systemInstruction: VISION_SYSTEM,
-                responseMimeType: "application/json",
-            },
-        });
+            }),
+            VISION_TIMEOUT_MS,
+            `vision ${modelName}`
+        );
 
         const m = normalize(safeParse(response.text ?? ""));
 
@@ -435,7 +497,7 @@ app.post("/api/vision", requireAuth, async (req: Request, res: Response) => {
 });
 
 // POST /api/orchestrate ------------------------------------------------------
-app.post("/api/orchestrate", requireAuth, async (req: Request, res: Response) => {
+app.post("/api/orchestrate", requireAuth, orchestrateLimit, async (req: Request, res: Response) => {
     try {
         const { observation, session } = req.body as {
             observation?: any;

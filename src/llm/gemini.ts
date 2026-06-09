@@ -6,6 +6,11 @@
  * Vendor lives here and nowhere else. If Google changes their SDK again (they
  * just did — see the migration we went through), this is the single file that
  * changes. Everything upstream depends on LLMProvider, not on Google.
+ *
+ * Fix 6: every model call is wrapped in withTimeout so a hung Gemini request
+ * can't tie up the orchestrator/router/synth/agents forever. Because router,
+ * agents, synthesizer, and the recap all go through this provider, wrapping it
+ * here covers nearly every LLM hang in the system in one place.
  */
 
 import { GoogleGenAI } from "@google/genai";
@@ -14,16 +19,20 @@ import {
     LLMMessage,
     LLMCompleteOptions,
 } from "./provider";
+import { withTimeout } from "../util/withTimeout";
 
 export interface GeminiConfig {
     apiKey: string;
     /** Defaults to a fast, cheap model good for routing decisions. */
     model?: string;
+    /** Hard per-request ceiling in ms. Default 30s. */
+    timeoutMs?: number;
 }
 
 export class GeminiProvider implements LLMProvider {
     readonly modelId: string;
     private ai: GoogleGenAI;
+    private timeoutMs: number;
 
     constructor(cfg: GeminiConfig) {
         if (!cfg.apiKey) {
@@ -31,6 +40,7 @@ export class GeminiProvider implements LLMProvider {
         }
         this.ai = new GoogleGenAI({ apiKey: cfg.apiKey });
         this.modelId = cfg.model ?? "gemini-3.5-flash";
+        this.timeoutMs = cfg.timeoutMs ?? 30_000;
     }
 
     async complete(
@@ -50,19 +60,23 @@ export class GeminiProvider implements LLMProvider {
                 parts: [{ text: m.content }],
             }));
 
-        const response = await this.ai.models.generateContent({
-            model: this.modelId,
-            contents,
-            config: {
-                ...(systemParts.length
-                    ? { systemInstruction: systemParts.join("\n\n") }
-                    : {}),
-                temperature: opts?.temperature ?? 0.2,
-                ...(opts?.maxOutputTokens
-                    ? { maxOutputTokens: opts.maxOutputTokens }
-                    : {}),
-            },
-        });
+        const response = await withTimeout(
+            this.ai.models.generateContent({
+                model: this.modelId,
+                contents,
+                config: {
+                    ...(systemParts.length
+                        ? { systemInstruction: systemParts.join("\n\n") }
+                        : {}),
+                    temperature: opts?.temperature ?? 0.2,
+                    ...(opts?.maxOutputTokens
+                        ? { maxOutputTokens: opts.maxOutputTokens }
+                        : {}),
+                },
+            }),
+            this.timeoutMs,
+            `Gemini ${this.modelId}`
+        );
 
         const text = response.text;
         if (text === undefined || text === null) {

@@ -4,15 +4,18 @@
 <head>
     <meta charset="utf-8" />
     <meta content="width=device-width, initial-scale=1.0, viewport-fit=cover" name="viewport" />
+    <meta name="theme-color" content="#14110F" />
     <title>DaVinci</title>
+
     <link href="https://fonts.googleapis.com" rel="preconnect" />
     <link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect" />
     <link
-        href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700&amp;family=Space+Mono:wght@400;700&amp;display=swap"
+        href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=Hanken+Grotesk:wght@400;500;600;700&family=Space+Mono:wght@400;700&display=swap"
         rel="stylesheet" />
     <link
-        href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap"
+        href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-25..0&display=swap"
         rel="stylesheet" />
+
     <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
     <script id="tailwind-config">
         tailwind.config = {
@@ -20,168 +23,237 @@
             theme: {
                 extend: {
                     colors: {
-                        "surface-variant": "#3a3333",
-                        "primary-fixed-dim": "#c6c6c7",
-                        "on-secondary-fixed-variant": "#852400",
-                        "error-container": "#93000a",
-                        "on-error-container": "#ffdad6",
-                        "surface-dim": "#171212",
-                        "on-surface-variant": "#c4c7c8",
-                        "error": "#ffb4ab",
-                        "surface-bright": "#3e3837",
-                        "on-surface": "#ece0df",
-                        "on-primary": "#2f3131",
-                        "secondary-fixed-dim": "#ffb59e",
-                        "secondary-container": "#ff571a",
-                        "background": "#171212",
-                        "secondary-fixed": "#ffdbd0",
-                        "surface-tint": "#c6c6c7",
-                        "on-secondary-fixed": "#3a0b00",
-                        "primary-fixed": "#e2e2e2",
-                        "tertiary-fixed-dim": "#ccc5bf",
-                        "surface-container": "#241e1e",
-                        "primary-container": "#e2e2e2",
-                        "on-error": "#690005",
-                        "inverse-primary": "#5d5f5f",
-                        "outline": "#8e9192",
-                        "on-tertiary-fixed-variant": "#4a4641",
-                        "primary": "#ffffff",
-                        "surface-container-highest": "#3a3333",
-                        "inverse-surface": "#ece0df",
-                        "surface-container-low": "#201a1a",
-                        "on-primary-fixed": "#1a1c1c",
-                        "surface": "#171212",
-                        "on-secondary-container": "#521300",
-                        "on-secondary": "#5e1700",
-                        "on-primary-fixed-variant": "#454747",
-                        "surface-container-lowest": "#120d0d",
-                        "outline-variant": "#444748",
-                        "tertiary": "#ffffff",
-                        "tertiary-fixed": "#e9e1da",
-                        "on-tertiary": "#33302b",
-                        "on-primary-container": "#636565",
-                        "secondary": "#ffb59e",
-                        "on-tertiary-fixed": "#1e1b17",
-                        "tertiary-container": "#e9e1da",
-                        "on-tertiary-container": "#68645e",
-                        "on-background": "#ece0df",
-                        "inverse-on-surface": "#352f2f",
-                        "surface-container-high": "#2f2828"
+                        ink: "#14110F",
+                        "ink-raised": "#1E1A17",
+                        "ink-high": "#272220",
+                        paper: "#F1E8DC",
+                        "paper-dim": "#B8AEA3",
+                        muted: "#8A817A",
+                        sanguine: "#D85A3B",
+                        "sanguine-deep": "#B0432A",
+                        "sanguine-wash": "rgba(216,90,59,0.10)",
                     },
-                    borderRadius: { "DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px", "bento": "24px", "card": "24px" },
-                    spacing: { "container-max": "1440px", "unit": "4px", "gutter": "16px", "margin-desktop": "48px", "margin-mobile": "20px" },
                     fontFamily: {
-                        "headline-md": ["Hanken Grotesk"], "display-lg": ["Hanken Grotesk"], "body-md": ["Hanken Grotesk"],
-                        "headline-lg": ["Hanken Grotesk"], "body-lg": ["Hanken Grotesk"], "status-dot": ["Space Mono"], "label-caps": ["Space Mono"]
+                        display: ['Fraunces', 'Georgia', 'serif'],
+                        body: ['"Hanken Grotesk"', 'system-ui', 'sans-serif'],
+                        mono: ['"Space Mono"', 'monospace'],
                     },
-                    fontSize: {
-                        "headline-md": ["24px", { "lineHeight": "1.3", "letterSpacing": "-0.01em", "fontWeight": "500" }],
-                        "display-lg": ["64px", { "lineHeight": "1.1", "letterSpacing": "-0.04em", "fontWeight": "600" }],
-                        "body-md": ["16px", { "lineHeight": "1.6", "letterSpacing": "0em", "fontWeight": "400" }],
-                        "headline-lg": ["32px", { "lineHeight": "1.2", "letterSpacing": "-0.02em", "fontWeight": "600" }],
-                        "body-lg": ["18px", { "lineHeight": "1.6", "letterSpacing": "0em", "fontWeight": "400" }],
-                        "status-dot": ["10px", { "lineHeight": "1.0", "letterSpacing": "0.05em", "fontWeight": "400" }],
-                        "label-caps": ["11px", { "lineHeight": "1.0", "letterSpacing": "0.1em", "fontWeight": "700" }]
-                    }
-                }
-            }
-        }
+                    borderRadius: { DEFAULT: "10px", lg: "14px", xl: "18px", card: "18px" },
+                },
+            },
+        };
     </script>
+
     <style>
+        :root {
+            --ink: #14110F;
+            --line: rgba(241, 232, 220, 0.12);
+            --line-soft: rgba(241, 232, 220, 0.07);
+            --sanguine: #D85A3B;
+        }
+
+        html,
         body {
-            background-color: #171212;
-            color: #ece0df;
+            background-color: var(--ink);
+            color: #F1E8DC;
+        }
+
+        body {
+            font-family: 'Hanken Grotesk', system-ui, sans-serif;
             -webkit-font-smoothing: antialiased;
             overflow-x: hidden;
+            letter-spacing: 0.005em;
         }
 
-        .inner-glow-1px-white-10 {
-            box-shadow: inset 0 1px 1px 0 rgba(255, 255, 255, 0.1);
+        /* ---- type roles ---- */
+        .u-display {
+            font-family: 'Fraunces', Georgia, serif;
+            font-optical-sizing: auto;
+            letter-spacing: -0.015em;
+            line-height: 1.05;
         }
 
-        .bento-border {
-            border: 0.5px solid rgba(255, 255, 255, 0.2);
-            border-bottom-color: rgba(255, 255, 255, 0.1);
-            border-right-color: rgba(255, 255, 255, 0.1);
+        .u-label {
+            font-family: 'Space Mono', monospace;
+            font-size: 10px;
+            letter-spacing: 0.18em;
+            text-transform: uppercase;
+            color: #8A817A;
         }
 
-        .glass-panel {
-            background: rgba(255, 255, 255, 0.04);
-            backdrop-filter: blur(24px);
-            -webkit-backdrop-filter: blur(24px);
+        .u-data {
+            font-family: 'Space Mono', monospace;
+            letter-spacing: 0.02em;
         }
 
-        .glass-card {
-            background: rgba(255, 255, 255, 0.03);
-            backdrop-filter: blur(32px);
-            border-top: 0.5px solid rgba(255, 255, 255, 0.2);
-            border-left: 0.5px solid rgba(255, 255, 255, 0.2);
-            border-bottom: 0.5px solid rgba(255, 255, 255, 0.1);
-            border-right: 0.5px solid rgba(255, 255, 255, 0.1);
-            box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.1);
+        /* ---- the signature: margin index ---- */
+        .margin {
+            position: relative;
+            padding-left: 26px;
         }
 
-        .scanline {
-            background: linear-gradient(to bottom, transparent 50%, rgba(255, 255, 255, 0.05) 50%);
-            background-size: 100% 4px;
-            pointer-events: none;
-        }
-
-        .bg-warm-glow {
-            background: radial-gradient(circle at 50% 50%, rgba(255, 87, 26, 0.08) 0%, transparent 70%);
-        }
-
-        .bento-grid {
-            display: grid;
-            grid-template-columns: repeat(2, 1fr);
-            gap: 16px;
-        }
-
-        .bento-span-2 {
-            grid-column: span 2;
-        }
-
-        .camera-corner {
-            width: 20px;
-            height: 20px;
-            border-color: rgba(255, 255, 255, 0.4);
+        .margin::before {
+            content: "";
             position: absolute;
+            left: 8px;
+            top: 6px;
+            bottom: 6px;
+            width: 1px;
+            background: var(--line);
         }
 
-        .orb-pulse {
-            animation: orbpulse 8s ease-in-out infinite;
+        .margin-tick {
+            position: relative;
         }
 
-        @keyframes orbpulse {
+        .margin-tick::before {
+            content: "";
+            position: absolute;
+            left: -18px;
+            top: 0.7em;
+            width: 10px;
+            height: 1px;
+            background: rgba(216, 90, 59, 0.6);
+        }
+
+        /* ---- surfaces ---- */
+        .card {
+            background: #1E1A17;
+            border: 1px solid var(--line);
+            border-radius: 18px;
+        }
+
+        .card-soft {
+            background: rgba(241, 232, 220, 0.025);
+            border: 1px solid var(--line-soft);
+            border-radius: 14px;
+        }
+
+        .hair {
+            border-color: var(--line);
+        }
+
+        /* ---- live indicator (sanguine = da Vinci's red chalk + recording) ---- */
+        .live-dot {
+            width: 7px;
+            height: 7px;
+            border-radius: 50%;
+            background: var(--sanguine);
+            box-shadow: 0 0 0 0 rgba(216, 90, 59, 0.5);
+        }
+
+        .live-dot.on {
+            animation: live 1.8s cubic-bezier(.4, 0, .6, 1) infinite;
+        }
+
+        @keyframes live {
 
             0%,
             100% {
-                transform: scale(1);
-                opacity: 0.4;
-                filter: blur(40px);
-            }
-
-            50% {
-                transform: scale(1.1);
-                opacity: 0.6;
-                filter: blur(60px);
-            }
-        }
-
-        @keyframes pulse-dot {
-
-            0%,
-            100% {
+                box-shadow: 0 0 0 0 rgba(216, 90, 59, 0.45);
                 opacity: 1;
             }
 
             50% {
-                opacity: 0.3;
+                box-shadow: 0 0 0 5px rgba(216, 90, 59, 0);
+                opacity: .55;
             }
         }
 
-        .animate-pulse-dot {
-            animation: pulse-dot 2s infinite;
+        /* ---- screen switching ---- */
+        .screen {
+            display: none;
+        }
+
+        .screen.active {
+            display: block;
+            animation: rise .42s cubic-bezier(.2, .7, .2, 1) both;
+        }
+
+        @keyframes rise {
+            from {
+                opacity: 0;
+                transform: translateY(8px);
+            }
+
+            to {
+                opacity: 1;
+                transform: none;
+            }
+        }
+
+        .stagger>* {
+            opacity: 0;
+            animation: rise .5s cubic-bezier(.2, .7, .2, 1) forwards;
+        }
+
+        .stagger>*:nth-child(1) {
+            animation-delay: .04s;
+        }
+
+        .stagger>*:nth-child(2) {
+            animation-delay: .10s;
+        }
+
+        .stagger>*:nth-child(3) {
+            animation-delay: .16s;
+        }
+
+        .stagger>*:nth-child(4) {
+            animation-delay: .22s;
+        }
+
+        .stagger>*:nth-child(5) {
+            animation-delay: .28s;
+        }
+
+        .stagger>*:nth-child(6) {
+            animation-delay: .34s;
+        }
+
+        .navlink.active-nav {
+            color: var(--sanguine);
+        }
+
+        .navlink.active-nav .dot {
+            opacity: 1;
+        }
+
+        /* ---- instrument tiles ---- */
+        .instrument {
+            position: relative;
+            overflow: hidden;
+            transition: transform .12s ease, border-color .2s ease, background .2s ease;
+        }
+
+        .instrument:active {
+            transform: scale(.98);
+        }
+
+        @media (hover: hover) {
+            .instrument:hover {
+                border-color: rgba(216, 90, 59, 0.4);
+            }
+        }
+
+        /* ---- inputs ---- */
+        .field {
+            background: transparent;
+            border: none;
+            outline: none;
+            color: #F1E8DC;
+            font-family: 'Hanken Grotesk', sans-serif;
+            width: 100%;
+        }
+
+        .field::placeholder {
+            color: rgba(184, 174, 163, 0.5);
+        }
+
+        textarea.field {
+            resize: none;
+            max-height: 96px;
+            line-height: 1.5;
         }
 
         .hide-scrollbar::-webkit-scrollbar {
@@ -193,109 +265,9 @@
             scrollbar-width: none;
         }
 
-        .temporal-line {
-            background: linear-gradient(180deg, rgba(255, 255, 255, 0.05) 0%, rgba(255, 255, 255, 0.4) 50%, rgba(255, 255, 255, 0.05) 100%);
-        }
-
-        /* Screen switching */
-        .screen {
-            display: none;
-        }
-
-        .screen.active {
-            display: block;
-        }
-
-        .navlink.active-nav {
-            color: #ff571a;
-        }
-
-        /* Typing indicator */
-        .typing-indicator {
-            display: inline-flex;
-            align-items: center;
-            gap: 4px;
-            padding: 12px 18px;
-        }
-
-        .typing-indicator span {
-            width: 6px;
-            height: 6px;
-            border-radius: 50%;
-            background: rgba(255, 255, 255, 0.4);
-            animation: typingBounce 1.4s ease-in-out infinite;
-        }
-
-        .typing-indicator span:nth-child(2) {
-            animation-delay: 0.2s;
-        }
-
-        .typing-indicator span:nth-child(3) {
-            animation-delay: 0.4s;
-        }
-
-        @keyframes typingBounce {
-
-            0%,
-            60%,
-            100% {
-                transform: translateY(0);
-                opacity: 0.4;
-            }
-
-            30% {
-                transform: translateY(-6px);
-                opacity: 1;
-            }
-        }
-
-        /* Chat input */
-        .chat-input-area {
-            background: rgba(255, 255, 255, 0.04);
-            backdrop-filter: blur(24px);
-            -webkit-backdrop-filter: blur(24px);
-        }
-
-        .chat-textarea {
-            background: transparent;
-            border: none;
-            outline: none;
-            resize: none;
-            color: #ece0df;
-            font-family: 'Hanken Grotesk', sans-serif;
-            font-size: 16px;
-            line-height: 1.5;
-            width: 100%;
-            max-height: 80px;
-            overflow-y: auto;
-        }
-
-        .chat-textarea::placeholder {
-            color: rgba(196, 199, 200, 0.5);
-        }
-
-        .chat-textarea::-webkit-scrollbar {
-            width: 0;
-        }
-
-        /* Vision question input */
-        .vision-input {
-            background: transparent;
-            border: none;
-            outline: none;
-            color: #ece0df;
-            font-family: 'Hanken Grotesk', sans-serif;
-            font-size: 14px;
-            width: 100%;
-        }
-
-        .vision-input::placeholder {
-            color: rgba(196, 199, 200, 0.4);
-        }
-
-        /* Markdown-ish reply styling */
+        /* ---- chat reply markup ---- */
         .ai-reply p {
-            margin-bottom: 0.5em;
+            margin-bottom: .5em;
         }
 
         .ai-reply p:last-child {
@@ -303,513 +275,770 @@
         }
 
         .ai-reply strong {
-            color: #ffffff;
+            color: #fff;
+            font-weight: 600;
         }
 
         .ai-reply ul,
         .ai-reply ol {
             padding-left: 1.2em;
-            margin-bottom: 0.5em;
+            margin-bottom: .5em;
         }
 
         .ai-reply code {
-            background: rgba(255, 255, 255, 0.08);
+            background: rgba(241, 232, 220, .08);
             padding: 2px 6px;
-            border-radius: 4px;
-            font-size: 0.9em;
+            border-radius: 5px;
+            font-family: 'Space Mono', monospace;
+            font-size: .88em;
+        }
+
+        /* ---- typing ---- */
+        .typing {
+            display: inline-flex;
+            gap: 5px;
+            align-items: center;
+            padding: 12px 16px;
+        }
+
+        .typing span {
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            background: var(--sanguine);
+            opacity: .4;
+            animation: tb 1.3s ease-in-out infinite;
+        }
+
+        .typing span:nth-child(2) {
+            animation-delay: .18s;
+        }
+
+        .typing span:nth-child(3) {
+            animation-delay: .36s;
+        }
+
+        @keyframes tb {
+
+            0%,
+            60%,
+            100% {
+                transform: translateY(0);
+                opacity: .35;
+            }
+
+            30% {
+                transform: translateY(-5px);
+                opacity: 1;
+            }
+        }
+
+        /* ---- vision annotation caption (the margin-note motif, applied to the world) ---- */
+        .annotation {
+            position: relative;
+            background: rgba(20, 17, 15, 0.62);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border: 1px solid var(--line);
+            border-left: 2px solid var(--sanguine);
+            border-radius: 4px 14px 14px 4px;
+        }
+
+        .corner {
+            position: absolute;
+            width: 18px;
+            height: 18px;
+            border-color: rgba(241, 232, 220, 0.45);
+        }
+
+        .guidance-note {
+            display: block;
+        }
+
+        .guidance-note::before {
+            content: "DAVINCI OBSERVES";
+            display: block;
+            font-family: 'Space Mono', monospace;
+            font-size: 9px;
+            letter-spacing: .18em;
+            color: var(--sanguine);
+            margin-bottom: 6px;
+        }
+
+        .scan {
+            background: repeating-linear-gradient(to bottom, transparent 0 3px, rgba(241, 232, 220, .03) 3px 4px);
+            pointer-events: none;
+        }
+
+        /* ---- voice console: the primary channel ---- */
+        .voice-console {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .voice-caption {
+            max-width: 92%;
+            text-align: center;
+            color: #F1E8DC;
+            font-size: 14px;
+            line-height: 1.4;
+            opacity: 0;
+            transition: opacity .25s;
+            margin: 0 0 2px;
+            min-height: 1.4em;
+        }
+
+        .voice-console.is-listening .voice-caption,
+        .voice-console.is-thinking .voice-caption {
+            opacity: 1;
+        }
+
+        .voice-bar {
+            display: flex;
+            align-items: center;
+            gap: 22px;
+        }
+
+        .voice-orb {
+            position: relative;
+            width: 72px;
+            height: 72px;
+            border-radius: 9999px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: #1E1A17;
+            border: 1px solid var(--line);
+            color: #F1E8DC;
+            transition: transform .12s ease, border-color .2s, box-shadow .3s;
+        }
+
+        .voice-orb:active {
+            transform: scale(.96);
+        }
+
+        .voice-wave {
+            position: absolute;
+            inset: 8px;
+            width: calc(100% - 16px);
+            height: calc(100% - 16px);
+            opacity: 0;
+            transition: opacity .2s;
+        }
+
+        #voice-icon {
+            position: relative;
+            z-index: 1;
+            transition: opacity .2s;
+        }
+
+        .voice-console.is-listening .voice-orb {
+            border-color: var(--sanguine);
+            box-shadow: 0 0 0 6px rgba(216, 90, 59, .10);
+        }
+
+        .voice-console.is-listening .voice-wave {
+            opacity: 1;
+        }
+
+        .voice-console.is-listening #voice-icon {
+            opacity: 0;
+        }
+
+        .voice-console.is-thinking .voice-orb {
+            border-color: var(--sanguine);
+        }
+
+        .voice-console.is-thinking #voice-icon {
+            animation: think 1.2s ease-in-out infinite;
+        }
+
+        @keyframes think {
+
+            0%,
+            100% {
+                opacity: .4;
+            }
+
+            50% {
+                opacity: 1;
+            }
+        }
+
+        .voice-console.is-speaking .voice-orb {
+            border-color: var(--sanguine);
+        }
+
+        .voice-console.is-speaking .voice-orb::after {
+            content: "";
+            position: absolute;
+            inset: 0;
+            border-radius: 9999px;
+            border: 1px solid var(--sanguine);
+            animation: emit 1.6s ease-out infinite;
+        }
+
+        @keyframes emit {
+            0% {
+                transform: scale(1);
+                opacity: .5;
+            }
+
+            100% {
+                transform: scale(1.5);
+                opacity: 0;
+            }
+        }
+
+        .voice-status {
+            font-size: 9px;
+        }
+
+        .voice-mini {
+            width: 40px;
+            height: 40px;
+            border-radius: 9999px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: rgba(241, 232, 220, .04);
+            border: 1px solid var(--line-soft);
+            color: #B8AEA3;
+            transition: transform .12s ease, color .2s, border-color .2s;
+        }
+
+        .voice-mini:active {
+            transform: scale(.92);
+        }
+
+        .text-row {
+            display: flex;
+            align-items: flex-end;
+            gap: 10px;
+            width: 100%;
+            padding: 10px 12px;
+            border-radius: 16px;
+            margin-top: 8px;
+        }
+
+        .text-row[hidden] {
+            display: none;
+        }
+
+        :focus-visible {
+            outline: 2px solid var(--sanguine);
+            outline-offset: 2px;
+        }
+
+        @media (hover: hover) {
+            .voice-orb:hover {
+                border-color: rgba(216, 90, 59, .5);
+            }
+
+            .voice-mini:hover {
+                color: #F1E8DC;
+                border-color: var(--line);
+            }
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+
+            .screen.active,
+            .stagger>* {
+                animation: none;
+                opacity: 1;
+                transform: none;
+            }
+
+            .live-dot.on {
+                animation: none;
+            }
+
+            .voice-console.is-thinking #voice-icon,
+            .voice-console.is-speaking .voice-orb::after {
+                animation: none;
+            }
         }
     </style>
 </head>
 
-<body class="font-body-md text-body-md">
+<body class="font-body text-[15px]">
 
-    <!-- Atmospheric background, shared -->
+    <!-- ambient warmth -->
     <div class="fixed inset-0 pointer-events-none z-0">
-        <div class="absolute top-[-10%] right-[-10%] w-[60%] h-[60%] bg-warm-glow opacity-50 blur-[120px]"></div>
-        <div class="absolute bottom-[10%] left-[-10%] w-[50%] h-[50%] bg-surface-container opacity-30 blur-[100px]">
-        </div>
+        <div class="absolute -top-[20%] -right-[15%] w-[70%] h-[55%] rounded-full"
+            style="background:radial-gradient(circle, rgba(216,90,59,.07) 0%, transparent 70%);"></div>
     </div>
 
-    <!-- ============ SHARED TOP BAR ============ -->
+    <!-- ============ TOP BAR ============ -->
     <header
-        class="fixed top-0 w-full z-50 bg-surface/10 backdrop-blur-xl border-b border-white/10 flex justify-between items-center px-margin-mobile py-4 inner-glow-1px-white-10">
-        <div class="flex items-center gap-2">
-            <span class="material-symbols-outlined text-primary"
-                style="font-variation-settings:'FILL' 1;">terminal</span>
-            <span class="font-label-caps text-label-caps tracking-widest text-primary">DAVINCI</span>
+        class="fixed top-0 w-full z-50 bg-ink/80 backdrop-blur-xl border-b hair flex justify-between items-center px-5 py-3.5">
+        <div class="flex items-baseline gap-2">
+            <span class="u-display text-paper text-[19px] font-medium" style="letter-spacing:-0.02em;">DaVinci</span>
+            <span class="u-label" style="font-size:9px;">FIELD ASSISTANT</span>
         </div>
-        <div class="flex items-center gap-3">
-            <div class="flex items-center gap-2 px-2 py-1 bg-white/5 rounded-full border border-white/10">
-                <div class="w-1.5 h-1.5 rounded-full bg-secondary-container animate-pulse"></div>
-                <span class="font-status-dot text-status-dot text-on-surface-variant uppercase">On-device</span>
-            </div>
-        </div>
+        <button id="status-pill" onclick="showScreen('memory')"
+            class="flex items-center gap-2 pl-2.5 pr-3 py-1.5 rounded-full border hair bg-ink-raised active:scale-95 transition-transform">
+            <span id="status-dot" class="live-dot" style="background:#8A817A;"></span>
+            <span id="status-text" class="u-label" style="font-size:9px;color:#B8AEA3;">CHECKING</span>
+        </button>
     </header>
 
-    <!-- ============================================================= -->
-    <!-- HOME SCREEN -->
-    <!-- ============================================================= -->
-    <section id="screen-home" class="screen active relative z-10 min-h-screen pt-24 pb-32 px-margin-mobile">
-        <section class="mb-2">
-            <p class="font-label-caps text-label-caps text-on-surface-variant mb-1 tracking-[0.2em]" id="home-clock">—
-            </p>
-            <h2 class="font-headline-lg text-headline-lg text-primary">Good morning.</h2>
-            <p class="font-body-md text-body-md text-on-surface-variant mt-2 max-w-[85%]">Here's your day. Everything
-                below is reasoned from your calendar and files — privately, on your device.</p>
-        </section>
+    <!-- ============ HOME ============ -->
+    <section id="screen-home" class="screen active relative z-10 min-h-screen pt-20 pb-28">
+        <div class="px-5 stagger">
 
-        <div class="bento-grid mt-6">
-            <!-- Today's briefing -->
-            <div class="glass-card bento-span-2 rounded-bento p-6 relative overflow-hidden">
-                <div class="flex justify-between items-start mb-6">
-                    <div class="flex items-center gap-3">
-                        <span class="material-symbols-outlined text-secondary">wb_twilight</span>
-                        <span class="font-label-caps text-label-caps text-on-surface-variant">Morning Briefing</span>
-                    </div>
-                    <div class="bg-secondary-container/20 border border-secondary/30 px-3 py-1 rounded-full">
-                        <span
-                            class="font-status-dot text-status-dot text-secondary uppercase tracking-widest">Today</span>
-                    </div>
+            <!-- masthead -->
+            <div class="margin pt-6 pb-7">
+                <p id="home-eyebrow" class="u-label margin-tick mb-3">— · —</p>
+                <h1 class="u-display text-paper" style="font-size:clamp(40px,11vw,56px);font-weight:500;">
+                    <span id="home-greeting">Hello</span><span class="text-sanguine">.</span>
+                </h1>
+                <p id="home-sub" class="text-paper-dim mt-3 leading-relaxed max-w-[30ch] text-[15px]">
+                    Your plans and what DaVinci has learned about you — nothing fabricated, nothing sold.
+                </p>
+            </div>
+
+            <!-- today / real state from /api/plans -->
+            <div class="margin">
+                <div class="flex items-center justify-between mb-3 margin-tick">
+                    <span class="u-label">Today</span>
+                    <button onclick="showScreen('planner')" class="u-label" style="color:var(--sanguine);">All
+                        plans →</button>
                 </div>
-                <h3 class="font-headline-md text-headline-md text-primary mb-2">3 commitments, 1 deadline approaching
-                </h3>
-                <p class="font-body-md text-body-md text-on-surface-variant/80 mb-6">Your morning is clear for focused
-                    work. A deadline needs attention before end of day.</p>
-                <div class="space-y-3">
-                    <div class="flex items-center gap-4 py-2 border-b border-white/5"><span
-                            class="font-status-dot text-status-dot text-on-surface-variant">01</span><span
-                            class="text-on-surface">Review and reply to the open thread</span></div>
-                    <div class="flex items-center gap-4 py-2 border-b border-white/5"><span
-                            class="font-status-dot text-status-dot text-on-surface-variant">02</span><span
-                            class="text-on-surface">Prep notes for the afternoon call</span></div>
-                    <div class="flex items-center gap-4 py-2"><span
-                            class="font-status-dot text-status-dot text-on-surface-variant">03</span><span
-                            class="text-on-surface">Submit the deliverable before 6 PM</span></div>
+                <div id="home-today" class="card p-5 mb-7">
+                    <div class="u-data text-muted text-sm">Reading your plans…</div>
                 </div>
             </div>
 
-            <!-- Talk to DaVinci (primary action) -->
-            <button onclick="showScreen('conversation')"
-                class="glass-card rounded-bento p-5 flex flex-col justify-between aspect-square text-left active:scale-95 transition-transform">
-                <div class="w-10 h-10 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center">
-                    <span class="material-symbols-outlined text-primary text-xl"
-                        style="font-variation-settings:'FILL' 1;">graphic_eq</span>
-                </div>
-                <div>
-                    <span class="font-label-caps text-label-caps text-on-surface-variant block mb-1">Talk</span>
-                    <h4 class="font-headline-md text-headline-md text-primary">Ask</h4>
-                    <p class="font-status-dot text-status-dot text-on-surface-variant uppercase mt-1">Voice or text</p>
-                </div>
-            </button>
-
-            <!-- Summon vision -->
-            <button onclick="showScreen('vision')"
-                class="glass-card rounded-bento p-5 flex flex-col justify-between aspect-square text-left active:scale-95 transition-transform relative overflow-hidden">
-                <div
-                    class="relative z-10 w-10 h-10 rounded-xl bg-white/10 border border-white/20 flex items-center justify-center">
-                    <span class="material-symbols-outlined text-primary text-xl">filter_center_focus</span>
-                </div>
-                <div class="relative z-10">
-                    <span class="font-label-caps text-label-caps text-on-surface-variant block mb-1">Summon</span>
-                    <h4 class="font-headline-md text-headline-md text-primary">Vision</h4>
-                    <p class="font-status-dot text-status-dot text-on-surface-variant uppercase mt-1">Point camera</p>
-                </div>
-            </button>
-
-            <!-- Schedule preview -->
-            <div class="glass-card bento-span-2 rounded-bento p-6">
-                <div class="flex justify-between items-center mb-6">
-                    <div class="flex items-center gap-3">
-                        <span class="material-symbols-outlined text-on-surface-variant text-lg">schedule</span>
-                        <span class="font-label-caps text-label-caps text-on-surface-variant">Today's Shape</span>
-                    </div>
-                    <button onclick="showScreen('planner')"
-                        class="font-status-dot text-status-dot text-secondary uppercase">Open planner →</button>
-                </div>
-                <div class="relative h-24 flex items-end gap-[3px]">
-                    <div class="flex-1 bg-white/5 rounded-t-sm" style="height:45%"></div>
-                    <div class="flex-1 bg-white/5 rounded-t-sm" style="height:35%"></div>
-                    <div class="flex-1 bg-white/5 rounded-t-sm" style="height:55%"></div>
-                    <div class="flex-1 bg-white/5 rounded-t-sm" style="height:48%"></div>
-                    <div class="flex-1 bg-white/5 rounded-t-sm" style="height:72%"></div>
-                    <div class="flex-1 bg-secondary-container rounded-t-sm relative shadow-[0_0_15px_rgba(255,87,26,0.3)]"
-                        style="height:85%">
-                        <div class="absolute -top-8 left-1/2 -translate-x-1/2 flex flex-col items-center">
-                            <span class="font-status-dot text-status-dot text-secondary">NOW</span>
+            <!-- the four instruments -->
+            <div class="margin">
+                <p class="u-label margin-tick mb-3">Instruments</p>
+                <div class="grid grid-cols-2 gap-3 mb-7">
+                    <button onclick="showScreen('conversation')"
+                        class="instrument card p-5 flex flex-col justify-between aspect-[5/4] text-left">
+                        <span class="material-symbols-outlined text-paper"
+                            style="font-size:26px;font-variation-settings:'wght' 300;">forum</span>
+                        <div>
+                            <h3 class="u-display text-paper text-[22px] font-medium leading-none">Talk</h3>
+                            <p class="u-label mt-2" style="font-size:9px;">ASK · PLAN · ACT</p>
                         </div>
-                    </div>
-                    <div class="flex-1 bg-white/5 rounded-t-sm" style="height:58%"></div>
-                    <div class="flex-1 bg-white/5 rounded-t-sm" style="height:42%"></div>
-                    <div class="flex-1 bg-white/5 rounded-t-sm" style="height:38%"></div>
-                    <div class="flex-1 bg-white/5 rounded-t-sm" style="height:25%"></div>
+                    </button>
+
+                    <button onclick="showScreen('vision')"
+                        class="instrument card p-5 flex flex-col justify-between aspect-[5/4] text-left relative">
+                        <span class="material-symbols-outlined text-paper"
+                            style="font-size:26px;font-variation-settings:'wght' 300;">center_focus_strong</span>
+                        <div>
+                            <h3 class="u-display text-paper text-[22px] font-medium leading-none">See</h3>
+                            <p class="u-label mt-2" style="font-size:9px;">POINT THE CAMERA</p>
+                        </div>
+                        <span class="absolute top-4 right-4 live-dot" style="background:#8A817A;"></span>
+                    </button>
+
+                    <button onclick="showScreen('planner')"
+                        class="instrument card p-5 flex flex-col justify-between aspect-[5/4] text-left">
+                        <span class="material-symbols-outlined text-paper"
+                            style="font-size:26px;font-variation-settings:'wght' 300;">checklist</span>
+                        <div>
+                            <h3 class="u-display text-paper text-[22px] font-medium leading-none">Plan</h3>
+                            <p id="home-plan-count" class="u-label mt-2" style="font-size:9px;">— GOALS</p>
+                        </div>
+                    </button>
+
+                    <button onclick="showScreen('memory')"
+                        class="instrument card p-5 flex flex-col justify-between aspect-[5/4] text-left">
+                        <span class="material-symbols-outlined text-paper"
+                            style="font-size:26px;font-variation-settings:'wght' 300;">book_2</span>
+                        <div>
+                            <h3 class="u-display text-paper text-[22px] font-medium leading-none">Recall</h3>
+                            <p id="home-memory-count" class="u-label mt-2" style="font-size:9px;">— NOTES</p>
+                        </div>
+                    </button>
                 </div>
             </div>
         </div>
     </section>
 
-    <!-- ============================================================= -->
-    <!-- VISION SCREEN — real camera transplanted here -->
-    <!-- ============================================================= -->
-    <section id="screen-vision" class="screen relative h-screen w-full">
-        <main class="relative h-screen w-full flex items-center justify-center p-2 pt-20 pb-24 overflow-hidden">
-            <div
-                class="relative w-full h-full rounded-[32px] overflow-hidden border border-white/10 shadow-2xl bg-black">
-                <!-- REAL CAMERA FEED -->
+    <!-- ============ VISION ============ -->
+    <section id="screen-vision" class="screen relative h-[100dvh] w-full">
+        <main class="relative h-[100dvh] w-full flex items-center justify-center p-2 pt-16 pb-24 overflow-hidden">
+            <div class="relative w-full h-full rounded-[26px] overflow-hidden border hair bg-black">
                 <video id="feed" autoplay playsinline muted class="absolute inset-0 w-full h-full object-cover"></video>
+                <div class="absolute inset-0 scan opacity-40 pointer-events-none"></div>
 
-                <!-- Technical overlay (decorative, kept) -->
-                <div class="absolute inset-0 scanline opacity-30 pointer-events-none"></div>
-                <div class="absolute inset-0 border-[20px] border-transparent pointer-events-none">
-                    <div class="camera-corner top-0 left-0 border-t-2 border-l-2"></div>
-                    <div class="camera-corner top-0 right-0 border-t-2 border-r-2"></div>
-                    <div class="camera-corner bottom-0 left-0 border-b-2 border-l-2"></div>
-                    <div class="camera-corner bottom-0 right-0 border-b-2 border-r-2"></div>
+                <!-- framing corners -->
+                <div class="absolute inset-0 pointer-events-none p-4">
+                    <div class="corner top-4 left-4 border-t-2 border-l-2 rounded-tl"></div>
+                    <div class="corner top-4 right-4 border-t-2 border-r-2 rounded-tr"></div>
+                    <div class="corner bottom-4 left-4 border-b-2 border-l-2 rounded-bl"></div>
+                    <div class="corner bottom-4 right-4 border-b-2 border-r-2 rounded-br"></div>
                 </div>
 
-                <!-- Live status pill -->
-                <div class="absolute top-6 left-6 flex gap-2">
-                    <div class="glass-panel bento-border px-3 py-1 rounded-full flex items-center gap-2">
-                        <div id="vision-dot" class="w-2 h-2 rounded-full bg-white/30"></div>
-                        <span id="vision-state" class="font-label-caps text-[9px] text-primary">IDLE</span>
+                <!-- state pill -->
+                <div class="absolute top-6 left-6">
+                    <div class="flex items-center gap-2 pl-2.5 pr-3 py-1.5 rounded-full annotation"
+                        style="border-left-width:1px;border-radius:9999px;">
+                        <span id="vision-dot" class="live-dot" style="background:#8A817A;"></span>
+                        <span id="vision-state" class="u-label" style="font-size:9px;color:#F1E8DC;">IDLE</span>
                     </div>
                 </div>
+                <div class="absolute top-6 right-6">
+                    <span id="status" class="u-data text-[10px] text-paper-dim"></span>
+                </div>
 
-                <!-- Guided session banner (6B) -->
+                <!-- guided banner -->
                 <div id="guided-banner" class="absolute top-16 left-6 right-6 hidden">
-                    <div class="glass-panel bento-border px-4 py-2 rounded-2xl flex items-center gap-2">
-                        <span class="material-symbols-outlined text-secondary text-base"
-                            style="font-variation-settings:'FILL' 1;">checklist</span>
-                        <span id="guided-goal" class="font-body-md text-sm text-on-surface truncate flex-1"></span>
-                        <span id="guided-flash"
-                            class="font-label-caps text-label-caps text-secondary opacity-0 transition-opacity duration-300">✓
-                            done</span>
+                    <div class="annotation px-4 py-2.5 flex items-center gap-2.5">
+                        <span class="material-symbols-outlined text-sanguine"
+                            style="font-size:18px;font-variation-settings:'FILL' 1;">checklist</span>
+                        <span id="guided-goal" class="text-paper text-sm truncate flex-1">Guiding…</span>
+                        <span id="guided-flash" class="u-label opacity-0 transition-opacity duration-300"
+                            style="color:var(--sanguine);">✓ DONE</span>
                     </div>
                 </div>
 
-                <!-- Guidance caption strip (this is where orchestrator speech will render) -->
-                <div class="absolute bottom-44 left-6 right-6">
-                    <div id="guidance"
-                        class="glass-panel bento-border p-4 rounded-2xl text-on-surface font-body-md text-[15px] leading-snug opacity-0 transition-opacity duration-300">
-                    </div>
+                <!-- annotation caption (this is where the assistant marks up the world) -->
+                <div class="absolute bottom-40 left-6 right-6">
+                    <p id="guidance" class="annotation guidance-note px-4 py-3.5 text-paper text-[15px] leading-snug"
+                        style="opacity:0;transition:opacity .3s;"></p>
                 </div>
 
-                <!-- Vision question input -->
+                <!-- ask input -->
                 <div class="absolute bottom-24 left-6 right-6">
-                    <div class="glass-panel bento-border rounded-2xl px-4 py-3 flex items-center gap-3">
-                        <span class="material-symbols-outlined text-on-surface-variant text-lg">question_answer</span>
-                        <input id="vision-question" type="text" class="vision-input"
+                    <div class="annotation flex items-center gap-3 px-4 py-3"
+                        style="border-left-width:1px;border-radius:14px;">
+                        <span class="material-symbols-outlined text-muted" style="font-size:18px;">help</span>
+                        <input id="vision-question" type="text" class="field text-sm"
                             placeholder="Ask about what you see…" />
                         <button id="vision-ask-btn"
-                            class="w-8 h-8 rounded-full bg-secondary-container flex items-center justify-center flex-shrink-0 active:scale-90 transition-transform">
-                            <span class="material-symbols-outlined text-background text-sm">send</span>
+                            class="w-8 h-8 rounded-full bg-sanguine flex items-center justify-center flex-shrink-0 active:scale-90 transition-transform">
+                            <span class="material-symbols-outlined text-ink" style="font-size:16px;">arrow_upward</span>
                         </button>
                     </div>
                 </div>
 
-                <!-- Controls -->
-                <div class="absolute bottom-6 left-6 right-6 flex items-center justify-center gap-6">
+                <!-- controls -->
+                <div class="absolute bottom-6 left-6 right-6 flex items-center justify-center gap-5">
                     <button id="startBtn"
-                        class="px-6 h-14 rounded-full bg-primary text-background font-label-caps text-label-caps tracking-widest flex items-center gap-2 shadow-[0_0_30px_rgba(255,255,255,0.25)] active:scale-95 transition-all">
+                        class="px-7 h-[52px] rounded-full bg-paper text-ink u-label flex items-center gap-2 active:scale-95 transition-transform"
+                        style="font-size:11px;">
                         <span class="material-symbols-outlined"
-                            style="font-variation-settings:'FILL' 1;">visibility</span>
+                            style="font-size:18px;font-variation-settings:'FILL' 1;">visibility</span>
                         SUMMON
                     </button>
                     <button id="stopBtn"
-                        class="hidden w-14 h-14 rounded-full glass-panel bento-border flex items-center justify-center text-on-surface active:scale-90 transition-transform">
-                        <span class="material-symbols-outlined">stop</span>
+                        class="hidden w-[52px] h-[52px] rounded-full annotation flex items-center justify-center text-paper active:scale-90 transition-transform"
+                        style="border-left-width:1px;border-radius:9999px;">
+                        <span class="material-symbols-outlined" style="font-size:20px;">stop</span>
                     </button>
-                </div>
-
-                <!-- Status / error line -->
-                <div class="absolute top-6 right-6">
-                    <span id="status" class="font-status-dot text-[10px] text-on-surface-variant"></span>
                 </div>
             </div>
         </main>
     </section>
 
-    <!-- ============================================================= -->
-    <!-- CONVERSATION SCREEN -->
-    <!-- ============================================================= -->
+    <!-- ============ CONVERSATION ============ -->
     <section id="screen-conversation" class="screen relative z-10 min-h-screen flex flex-col">
-        <main class="flex-1 overflow-y-auto pt-24 pb-40 px-margin-mobile hide-scrollbar relative">
-            <div class="fixed inset-0 pointer-events-none z-0">
-                <div
-                    class="absolute top-1/4 left-1/2 -translate-x-1/2 w-64 h-64 bg-secondary-container/20 rounded-full blur-[100px] orb-pulse">
-                </div>
-            </div>
-
-            <div class="relative z-10 space-y-8 flex flex-col" id="transcript">
-                <div class="flex flex-col gap-2 max-w-[85%]">
-                    <span class="font-label-caps text-[9px] text-secondary tracking-widest">DAVINCI</span>
-                    <div class="p-5 rounded-xl bg-white/5 backdrop-blur-md bento-border inner-glow-1px-white-10">
-                        <p class="font-body-md text-on-surface leading-relaxed">Good morning. You've got a deadline due
-                            before 6 PM today and a free morning block. Want me to lay out the work so it lands on time?
-                        </p>
-                    </div>
-                </div>
-                <div class="flex flex-col gap-2 max-w-[85%] self-end items-end">
-                    <span class="font-label-caps text-[9px] text-on-surface-variant tracking-widest">YOU</span>
-                    <div class="p-5 rounded-xl bg-primary-container text-on-primary-container shadow-lg">
-                        <p class="font-body-md leading-relaxed">Yes, and keep the afternoon call in mind.</p>
-                    </div>
-                </div>
-            </div>
+        <main class="flex-1 overflow-y-auto pt-20 pb-40 px-5 hide-scrollbar relative">
+            <div class="relative z-10 space-y-6 flex flex-col" id="transcript"></div>
         </main>
 
-        <!-- Chat input bar -->
-        <div class="fixed bottom-20 left-0 w-full z-50">
-            <!-- Waveform (voice mode) -->
-            <div class="w-full flex justify-center items-end px-margin-mobile pb-4 h-16 pointer-events-none"
-                id="waveform-wrap" style="display:none;">
-                <div class="flex items-end gap-[2px] h-full" id="waveform"></div>
+        <!-- Voice console — the primary channel; text is the fallback row -->
+        <div id="voice" class="voice-console fixed bottom-20 left-0 w-full z-40 px-4 pb-3 is-idle">
+            <p id="voice-caption" class="voice-caption" aria-live="polite"></p>
+
+            <div class="voice-bar">
+                <button id="voice-mute" class="voice-mini" aria-pressed="false" aria-label="Mute spoken replies"
+                    title="Mute spoken replies">
+                    <span class="material-symbols-outlined" style="font-size:20px;">volume_up</span>
+                </button>
+
+                <button id="voice-orb" class="voice-orb" aria-label="Tap to speak">
+                    <canvas id="wave" class="voice-wave"></canvas>
+                    <span id="voice-icon" class="material-symbols-outlined" style="font-size:26px;">mic</span>
+                </button>
+
+                <button id="text-toggle" class="voice-mini" aria-label="Type instead" title="Type instead">
+                    <span class="material-symbols-outlined" style="font-size:20px;">keyboard</span>
+                </button>
             </div>
-            <!-- Text input (default mode) -->
-            <div id="chat-input-wrap" class="px-4 pb-4">
-                <div
-                    class="chat-input-area bento-border rounded-2xl px-4 py-3 flex items-end gap-3 inner-glow-1px-white-10">
-                    <button id="mic-btn"
-                        class="w-10 h-10 rounded-full bg-white/5 border border-white/10 flex items-center justify-center text-on-surface-variant flex-shrink-0 active:scale-90 transition-transform hover:bg-white/10">
-                        <span class="material-symbols-outlined" style="font-variation-settings:'FILL' 1;">mic</span>
-                    </button>
-                    <textarea id="chat-textarea" class="chat-textarea" rows="1"
-                        placeholder="Message DaVinci…"></textarea>
-                    <button id="send-btn"
-                        class="w-10 h-10 rounded-full bg-secondary-container flex items-center justify-center flex-shrink-0 active:scale-90 transition-transform shadow-[0_0_15px_rgba(255,87,26,0.3)] hover:shadow-[0_0_25px_rgba(255,87,26,0.5)]">
-                        <span class="material-symbols-outlined text-background text-lg">arrow_upward</span>
-                    </button>
+            <p id="voice-status" class="voice-status u-label">TAP TO SPEAK</p>
+
+            <div id="text-row" class="text-row card" hidden>
+                <textarea id="chat-textarea" class="field text-[15px]" rows="1"
+                    placeholder="Type a message…"></textarea>
+                <button id="send-btn"
+                    class="w-9 h-9 rounded-full bg-sanguine flex items-center justify-center flex-shrink-0 active:scale-90 transition-transform"
+                    aria-label="Send">
+                    <span class="material-symbols-outlined text-ink" style="font-size:18px;">arrow_upward</span>
+                </button>
+            </div>
+        </div>
+    </section>
+
+    <!-- ============ PLANNER ============ -->
+    <section id="screen-planner" class="screen relative z-10 min-h-screen pt-20 pb-28 px-5 max-w-md mx-auto">
+        <div class="margin pt-6 pb-6">
+            <p id="planner-date" class="u-label margin-tick mb-3">—</p>
+            <h1 class="u-display text-paper" style="font-size:38px;font-weight:500;">Plans</h1>
+        </div>
+        <section id="plans-list" class="space-y-5"></section>
+    </section>
+
+    <!-- ============ MEMORY ============ -->
+    <section id="screen-memory" class="screen relative z-10 min-h-screen pt-20 pb-28 px-5">
+        <div class="margin pt-6 pb-6">
+            <p class="u-label margin-tick mb-3">The notebook</p>
+            <h1 class="u-display text-paper" style="font-size:38px;font-weight:500;">What DaVinci knows</h1>
+            <p class="text-paper-dim mt-3 leading-relaxed text-[15px] max-w-[34ch]">Everything here is tied to your
+                account and learned from your own conversations.</p>
+        </div>
+
+        <!-- identity -->
+        <div class="card p-4 mb-5 flex items-center justify-between">
+            <div class="flex items-center gap-3 min-w-0">
+                <span class="material-symbols-outlined text-paper-dim"
+                    style="font-variation-settings:'wght' 300;">account_circle</span>
+                <div class="min-w-0">
+                    <p class="u-label" style="font-size:9px;">SIGNED IN AS</p>
+                    <p id="signed-in-as" class="text-paper truncate">—</p>
+                </div>
+            </div>
+            <button onclick="signOut()"
+                class="px-3.5 py-2 rounded-lg card-soft text-paper-dim u-label active:scale-95 transition-transform"
+                style="font-size:9px;">SIGN OUT</button>
+        </div>
+
+        <!-- connected services (driven by /api/me) -->
+        <div class="card p-5 mb-5">
+            <div class="flex items-center justify-between mb-4">
+                <span class="u-label">Connected</span>
+                <span class="material-symbols-outlined text-muted" style="font-size:16px;">hub</span>
+            </div>
+            <div id="connected-sources" class="space-y-2">
+                <p class="u-data text-muted text-sm">Checking connections…</p>
+            </div>
+        </div>
+
+        <!-- learned memory (driven by /api/memory) -->
+        <div class="card p-5 mb-5">
+            <div class="flex items-center justify-between mb-4">
+                <span class="u-label">Learned about you</span>
+                <button id="memory-refresh-btn"
+                    class="material-symbols-outlined text-muted hover:text-paper transition-colors bg-transparent border-none cursor-pointer"
+                    style="font-size:16px;" title="Refresh">refresh</button>
+            </div>
+
+            <div id="memory-loading" class="u-data text-muted text-sm">Reading the notebook…</div>
+
+            <div id="memory-content" class="space-y-5 hidden">
+                <div>
+                    <p class="u-label mb-2.5">Preferences</p>
+                    <div id="memory-preferences" class="space-y-1.5"></div>
+                </div>
+                <div>
+                    <p class="u-label mb-2.5">Patterns</p>
+                    <div id="memory-patterns" class="space-y-1.5"></div>
+                </div>
+                <div>
+                    <p class="u-label mb-2.5">Facts</p>
+                    <div id="memory-facts" class="space-y-1.5"></div>
+                </div>
+            </div>
+
+            <div id="memory-empty" class="hidden">
+                <p class="text-paper-dim text-sm leading-relaxed">Nothing written down yet. As you talk to DaVinci, it
+                    notes the things worth remembering — and they show up here.</p>
+            </div>
+        </div>
+
+        <!-- honest privacy statement -->
+        <div class="card p-5" style="border-color:rgba(216,90,59,0.25);background:rgba(216,90,59,0.04);">
+            <div class="flex items-start gap-3.5">
+                <span class="material-symbols-outlined text-sanguine"
+                    style="font-variation-settings:'FILL' 1;font-size:22px;">verified_user</span>
+                <div>
+                    <p class="u-label mb-2" style="color:#F1E8DC;">How your data is handled</p>
+                    <p class="text-paper-dim text-sm leading-relaxed">DaVinci uses Google's AI to reason, so your
+                        messages are processed in the cloud — tied to your account, encrypted in transit and at rest,
+                        and never sold. Camera frames are analyzed in the moment and not stored; only short text notes
+                        are kept. DaVinci always asks before it sends an email or changes your calendar.</p>
                 </div>
             </div>
         </div>
     </section>
 
-    <!-- ============================================================= -->
-    <!-- PLANNER SCREEN -->
-    <!-- ============================================================= -->
-    <section id="screen-planner"
-        class="screen relative z-10 min-h-screen pt-24 pb-32 px-margin-mobile max-w-md mx-auto">
-        <section class="mb-8">
-            <h1 class="font-headline-lg text-headline-lg text-primary mb-1">Your Plans</h1>
-            <p class="font-body-md text-on-surface-variant" id="planner-date">—</p>
-        </section>
-
-        <!-- Live plans, rendered by renderPlanner() from GET /api/plans -->
-        <section id="plans-list" class="space-y-6"></section>
-    </section>
-
-    <!-- ============================================================= -->
-    <!-- MEMORY SCREEN -->
-    <!-- ============================================================= -->
-    <section id="screen-memory" class="screen relative z-10 min-h-screen pt-24 pb-32 px-margin-mobile">
-        <section class="mb-6">
-            <h1 class="font-headline-lg text-headline-lg text-primary mb-1">What DaVinci Knows</h1>
-            <p class="font-body-md text-on-surface-variant">Your goals, habits, and the sources it can draw on — held on
-                your device.</p>
-        </section>
-        <section class="glass-card bento-border rounded-bento p-4 mb-6 flex items-center justify-between">
-            <div class="flex items-center gap-3">
-                <span class="material-symbols-outlined text-primary">account_circle</span>
-                <div>
-                    <p class="font-status-dot text-status-dot text-on-surface-variant uppercase">Signed in as</p>
-                    <p id="signed-in-as" class="font-body-md text-on-surface">—</p>
-                </div>
-            </div>
-            <button onclick="signOut()"
-                class="px-4 py-2 rounded-xl bg-white/5 border border-white/10 text-on-surface-variant font-label-caps text-label-caps active:scale-95 transition-transform">Sign
-                out</button>
-        </section>
-        <!-- Connected sources -->
-        <section class="glass-card bento-border rounded-bento p-6 space-y-4 mb-6">
-            <div class="flex justify-between items-end">
-                <h2 class="font-label-caps text-label-caps text-primary/50 tracking-widest uppercase">Connected Sources
-                </h2>
-                <span class="material-symbols-outlined text-primary text-sm opacity-50">hub</span>
-            </div>
-            <div class="grid grid-cols-1 gap-2">
-                <div class="flex items-center justify-between p-3 rounded-xl bg-white/5 border border-white/5">
-                    <div class="flex items-center gap-3">
-                        <div
-                            class="w-10 h-10 rounded-lg flex items-center justify-center bg-primary/5 border border-primary/10">
-                            <span class="material-symbols-outlined text-primary">calendar_today</span>
-                        </div>
-                        <div>
-                            <p class="font-label-caps text-label-caps text-primary">Calendar</p>
-                            <p class="font-status-dot text-status-dot text-on-surface-variant opacity-60">Reads your
-                                real commitments</p>
-                        </div>
-                    </div>
-                    <span
-                        class="w-1.5 h-1.5 rounded-full bg-secondary-container shadow-[0_0_8px_rgba(255,87,26,0.6)]"></span>
-                </div>
-                <div class="flex items-center justify-between p-3 rounded-xl bg-white/5 border border-white/5">
-                    <div class="flex items-center gap-3">
-                        <div
-                            class="w-10 h-10 rounded-lg flex items-center justify-center bg-primary/5 border border-primary/10">
-                            <span class="material-symbols-outlined text-primary">folder_open</span>
-                        </div>
-                        <div>
-                            <p class="font-label-caps text-label-caps text-primary">Files</p>
-                            <p class="font-status-dot text-status-dot text-on-surface-variant opacity-60">Reasons over
-                                your documents</p>
-                        </div>
-                    </div>
-                    <span
-                        class="w-1.5 h-1.5 rounded-full bg-secondary-container shadow-[0_0_8px_rgba(255,87,26,0.6)]"></span>
-                </div>
-                <div class="flex items-center justify-between p-3 rounded-xl bg-white/5 border border-white/5">
-                    <div class="flex items-center gap-3">
-                        <div
-                            class="w-10 h-10 rounded-lg flex items-center justify-center bg-primary/5 border border-primary/10">
-                            <span class="material-symbols-outlined text-primary">visibility</span>
-                        </div>
-                        <div>
-                            <p class="font-label-caps text-label-caps text-primary">Vision memory</p>
-                            <p class="font-status-dot text-status-dot text-on-surface-variant opacity-60">Only what you
-                                point the camera at</p>
-                        </div>
-                    </div>
-                    <span
-                        class="w-1.5 h-1.5 rounded-full bg-secondary-container shadow-[0_0_8px_rgba(255,87,26,0.6)]"></span>
-                </div>
-            </div>
-        </section>
-
-        <!-- Dynamic Memory Data (fetched from Firestore/local) -->
-        <section id="memory-data-section" class="glass-card bento-border rounded-bento p-6 space-y-4 mb-6">
-            <div class="flex justify-between items-center">
-                <h2 class="font-label-caps text-label-caps text-primary/50 tracking-widest uppercase">What I Remember
-                </h2>
-                <button id="memory-refresh-btn"
-                    class="material-symbols-outlined text-primary text-sm opacity-50 hover:opacity-100 transition-opacity cursor-pointer bg-transparent border-none"
-                    title="Refresh memory">refresh</button>
-            </div>
-            <div id="memory-loading" class="text-on-surface-variant text-sm opacity-60">Loading memory...</div>
-            <div id="memory-content" class="space-y-4 hidden">
-                <!-- Preferences -->
-                <div>
-                    <div class="flex items-center gap-2 mb-2">
-                        <span class="material-symbols-outlined text-primary text-base">tune</span>
-                        <p class="font-label-caps text-label-caps text-primary">Preferences</p>
-                    </div>
-                    <div id="memory-preferences" class="space-y-1 pl-6"></div>
-                </div>
-                <!-- Past Patterns -->
-                <div>
-                    <div class="flex items-center gap-2 mb-2">
-                        <span class="material-symbols-outlined text-primary text-base">pattern</span>
-                        <p class="font-label-caps text-label-caps text-primary">Patterns</p>
-                    </div>
-                    <div id="memory-patterns" class="space-y-1 pl-6"></div>
-                </div>
-                <!-- Long-term Facts -->
-                <div>
-                    <div class="flex items-center gap-2 mb-2">
-                        <span class="material-symbols-outlined text-primary text-base">lightbulb</span>
-                        <p class="font-label-caps text-label-caps text-primary">Facts</p>
-                    </div>
-                    <div id="memory-facts" class="space-y-1 pl-6"></div>
-                </div>
-            </div>
-            <div id="memory-empty" class="hidden text-on-surface-variant text-sm opacity-60 italic">
-                No memories yet. Start chatting and DaVinci will learn about you.
-            </div>
-        </section>
-
-        <!-- Privacy statement — HONEST -->
-        <section
-            class="glass-card bento-border rounded-bento p-6 bg-secondary-container/5 border-secondary-container/20 space-y-4">
-            <div class="flex items-start gap-4">
-                <div class="text-secondary-container"><span class="material-symbols-outlined"
-                        style="font-variation-settings:'FILL' 1;">security</span></div>
-                <div>
-                    <h2 class="font-label-caps text-label-caps text-primary mb-2">Privacy by Architecture</h2>
-                    <p class="font-body-md text-body-md text-on-surface-variant text-sm leading-relaxed opacity-80">
-                        All reasoning about you happens on the device. Your files, calendar, and memory never leave it.
-                        Only simple, non-personal errands ever touch the internet — and only after you approve them.
-                    </p>
-                </div>
-            </div>
-        </section>
-    </section>
-
-    <!-- ============ SHARED BOTTOM NAV ============ -->
+    <!-- ============ BOTTOM NAV ============ -->
     <nav
-        class="fixed bottom-0 left-0 w-full z-50 bg-surface-container-lowest/40 backdrop-blur-2xl border-t border-white/10 flex justify-around items-center px-4 pb-8 pt-3 shadow-2xl">
+        class="fixed bottom-0 left-0 w-full z-50 bg-ink/85 backdrop-blur-2xl border-t hair flex justify-around items-stretch px-2 pb-7 pt-2.5">
         <button data-screen="home"
-            class="navlink flex flex-col items-center justify-center text-on-surface-variant/60 p-2 transition-colors active:scale-95 duration-150">
-            <span class="material-symbols-outlined mb-1">home_max</span><span
-                class="font-label-caps text-label-caps">Home</span>
+            class="navlink flex flex-col items-center gap-1 text-paper-dim/70 px-3 py-1 active:scale-95 transition">
+            <span class="dot live-dot opacity-0 mb-0.5" style="width:4px;height:4px;background:var(--sanguine);"></span>
+            <span class="material-symbols-outlined"
+                style="font-size:22px;font-variation-settings:'wght' 300;">cottage</span>
+            <span class="u-label" style="font-size:8px;color:inherit;">Home</span>
         </button>
         <button data-screen="vision"
-            class="navlink flex flex-col items-center justify-center text-on-surface-variant/60 p-2 transition-colors active:scale-95 duration-150">
-            <span class="material-symbols-outlined mb-1">filter_center_focus</span><span
-                class="font-label-caps text-label-caps">Vision</span>
+            class="navlink flex flex-col items-center gap-1 text-paper-dim/70 px-3 py-1 active:scale-95 transition">
+            <span class="dot live-dot opacity-0 mb-0.5" style="width:4px;height:4px;background:var(--sanguine);"></span>
+            <span class="material-symbols-outlined"
+                style="font-size:22px;font-variation-settings:'wght' 300;">center_focus_strong</span>
+            <span class="u-label" style="font-size:8px;color:inherit;">See</span>
         </button>
         <button data-screen="conversation"
-            class="navlink flex flex-col items-center justify-center text-on-surface-variant/60 p-2 transition-colors active:scale-95 duration-150">
-            <span class="material-symbols-outlined mb-1">graphic_eq</span><span
-                class="font-label-caps text-label-caps">Talk</span>
+            class="navlink flex flex-col items-center gap-1 text-paper-dim/70 px-3 py-1 active:scale-95 transition">
+            <span class="dot live-dot opacity-0 mb-0.5" style="width:4px;height:4px;background:var(--sanguine);"></span>
+            <span class="material-symbols-outlined"
+                style="font-size:22px;font-variation-settings:'wght' 300;">forum</span>
+            <span class="u-label" style="font-size:8px;color:inherit;">Talk</span>
         </button>
         <button data-screen="planner"
-            class="navlink flex flex-col items-center justify-center text-on-surface-variant/60 p-2 transition-colors active:scale-95 duration-150">
-            <span class="material-symbols-outlined mb-1">event_note</span><span
-                class="font-label-caps text-label-caps">Planner</span>
+            class="navlink flex flex-col items-center gap-1 text-paper-dim/70 px-3 py-1 active:scale-95 transition">
+            <span class="dot live-dot opacity-0 mb-0.5" style="width:4px;height:4px;background:var(--sanguine);"></span>
+            <span class="material-symbols-outlined"
+                style="font-size:22px;font-variation-settings:'wght' 300;">checklist</span>
+            <span class="u-label" style="font-size:8px;color:inherit;">Plan</span>
         </button>
         <button data-screen="memory"
-            class="navlink flex flex-col items-center justify-center text-on-surface-variant/60 p-2 transition-colors active:scale-95 duration-150">
-            <span class="material-symbols-outlined mb-1">memory</span><span
-                class="font-label-caps text-label-caps">Memory</span>
+            class="navlink flex flex-col items-center gap-1 text-paper-dim/70 px-3 py-1 active:scale-95 transition">
+            <span class="dot live-dot opacity-0 mb-0.5" style="width:4px;height:4px;background:var(--sanguine);"></span>
+            <span class="material-symbols-outlined"
+                style="font-size:22px;font-variation-settings:'wght' 300;">book_2</span>
+            <span class="u-label" style="font-size:8px;color:inherit;">Notebook</span>
         </button>
     </nav>
 
-    <script src="/vision-client.js"></script>
+    <!-- ============ AUTH GATE ============ -->
+    <div id="auth-gate" class="fixed inset-0 z-[100] bg-ink flex items-center justify-center px-6"
+        style="display:none;">
+        <div class="absolute inset-0 pointer-events-none">
+            <div class="absolute top-1/4 left-1/2 -translate-x-1/2 w-72 h-72 rounded-full"
+                style="background:radial-gradient(circle, rgba(216,90,59,.10) 0%, transparent 70%);"></div>
+        </div>
+        <div class="card p-8 max-w-sm w-full text-center relative">
+            <p class="u-label mb-5">FIELD ASSISTANT</p>
+            <h2 class="u-display text-paper mb-3" style="font-size:34px;font-weight:500;">DaVinci</h2>
+            <p class="text-paper-dim text-sm mb-7 leading-relaxed">An assistant that talks, plans, sees through your
+                camera, and remembers you. Sign in with Google to begin.</p>
+            <a href="/api/auth/google"
+                class="block w-full bg-paper text-ink py-3.5 rounded-xl u-label active:scale-95 transition-transform"
+                style="font-size:11px;color:#14110F;">CONTINUE WITH GOOGLE</a>
+        </div>
+    </div>
 
+    <script src="/vision-client.js"></script>
     <script>
-        // ========== Screen switching ==========
+        // ===================== Screen switching =====================
         function showScreen(name) {
             document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
             const el = document.getElementById('screen-' + name);
             if (el) el.classList.add('active');
-            document.querySelectorAll('.navlink').forEach(n => {
-                n.classList.toggle('active-nav', n.dataset.screen === name);
-            });
-            if (name !== 'vision' && window.VisionAgent) {
-                VisionAgent.stop();
-                hideGuidedBanner();
-            }
-            // Show/hide chat input bar only on conversation screen
-            const chatWrap = document.getElementById('chat-input-wrap');
-            if (chatWrap) chatWrap.style.display = name === 'conversation' ? '' : 'none';
+            document.querySelectorAll('.navlink').forEach(n =>
+                n.classList.toggle('active-nav', n.dataset.screen === name));
+            if (name !== 'vision' && window.VisionAgent) { VisionAgent.stop(); hideGuidedBanner(); }
+            if (name !== 'conversation' && typeof Voice !== 'undefined') Voice.cancelAll();
             window.scrollTo(0, 0);
-            if (name === 'memory') fetchMemory();
+            if (name === 'home') renderHome();
+            if (name === 'memory') { fetchMemory(); renderSources(); }
             if (name === 'planner') renderPlanner();
         }
-        document.querySelectorAll('.navlink').forEach(n => {
-            n.addEventListener('click', () => showScreen(n.dataset.screen));
-        });
+        document.querySelectorAll('.navlink').forEach(n =>
+            n.addEventListener('click', () => showScreen(n.dataset.screen)));
 
-        // ========== Planner (live plans) ==========
         function escapeHtml(s) {
-            return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+            return String(s).replace(/[&<>"']/g, c =>
+                ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
         }
 
+        // ===================== Home (real data only) =====================
+        function greetingFor(h) {
+            if (h < 5) return 'Still up'; if (h < 12) return 'Good morning';
+            if (h < 17) return 'Good afternoon'; if (h < 22) return 'Good evening'; return 'Good night';
+        }
+        async function renderHome() {
+            const now = new Date();
+            const g = document.getElementById('home-greeting');
+            if (g) g.textContent = currentUser?.displayName
+                ? `${greetingFor(now.getHours())}, ${currentUser.displayName.split(' ')[0]}`
+                : greetingFor(now.getHours());
+            const eb = document.getElementById('home-eyebrow');
+            if (eb) eb.textContent = now.toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric' }).toUpperCase();
+
+            const today = document.getElementById('home-today');
+            let plans = [];
+            try { const r = await fetch('/api/plans'); if (r.ok) plans = (await r.json()).plans || []; }
+            catch (e) { }
+
+            // plan count chip
+            const pc = document.getElementById('home-plan-count');
+            if (pc) pc.textContent = plans.length === 0 ? 'NONE YET'
+                : `${plans.length} GOAL${plans.length > 1 ? 'S' : ''}`;
+
+            if (!today) return;
+            if (plans.length === 0) {
+                today.innerHTML =
+                    `<p class="text-paper-dim text-sm leading-relaxed mb-4">No plans on the go. Tell DaVinci a goal and it
+                     builds the steps with you.</p>
+                     <button onclick="showScreen('conversation')"
+                       class="u-label active:scale-95 transition-transform" style="color:var(--sanguine);">
+                       Start a plan →</button>`;
+            } else {
+                const p = plans[0]; // most-recently-updated
+                const total = (p.steps || []).length;
+                const done = (p.steps || []).filter(s => s.done).length;
+                const pct = total ? Math.round(done / total * 100) : 0;
+                today.innerHTML =
+                    `<p class="u-label mb-2">MOST RECENT</p>
+                     <h3 class="u-display text-paper text-[24px] font-medium mb-3 leading-tight">${escapeHtml(p.goal)}</h3>
+                     <div class="flex items-center gap-3 mb-1.5">
+                       <div class="flex-1 h-1.5 rounded-full bg-paper/8 overflow-hidden">
+                         <div class="h-full rounded-full" style="width:${pct}%;background:var(--sanguine);"></div>
+                       </div>
+                       <span class="u-data text-paper-dim text-xs">${done}/${total}</span>
+                     </div>
+                     ${p.timeframe ? `<p class="u-label mt-3" style="font-size:9px;">${escapeHtml(p.timeframe)}</p>` : ''}
+                     <button onclick="showScreen('planner')"
+                       class="mt-4 u-label active:scale-95 transition-transform" style="color:var(--sanguine);">
+                       Open planner →</button>`;
+            }
+
+            // memory count chip
+            try {
+                const r = await fetch('/api/memory');
+                if (r.ok) {
+                    const m = await r.json();
+                    const n = Object.keys(m.preferences || {}).length
+                        + (m.past_patterns || []).length + (m.long_term_facts || []).length;
+                    const mc = document.getElementById('home-memory-count');
+                    if (mc) mc.textContent = n === 0 ? 'EMPTY' : `${n} NOTE${n > 1 ? 'S' : ''}`;
+                }
+            } catch (e) { }
+        }
+
+        // ===================== Planner =====================
         async function renderPlanner() {
             const host = document.getElementById('plans-list');
             if (!host) return;
-            host.innerHTML = '<p class="font-body-md text-on-surface-variant text-sm opacity-60">Loading…</p>';
+            host.innerHTML = '<p class="u-data text-muted text-sm">Loading…</p>';
             let plans = [];
             try {
                 const res = await fetch('/api/plans');
                 if (!res.ok) throw new Error('failed');
                 plans = (await res.json()).plans || [];
             } catch (err) {
-                host.innerHTML = '<p class="font-body-md text-on-surface-variant text-sm">Could not load plans.</p>';
+                host.innerHTML = '<p class="text-paper-dim text-sm">Couldn\'t load your plans. Check your connection and try again.</p>';
                 return;
             }
             if (!plans.length) {
                 host.innerHTML =
-                    '<div class="glass-card bento-border rounded-card p-6 text-center">' +
-                    '<p class="font-body-md text-on-surface-variant text-sm">No plans yet — tell DaVinci a goal.</p></div>';
+                    `<div class="card p-6 text-center">
+                       <p class="text-paper-dim text-sm leading-relaxed mb-4">No plans yet. Tell DaVinci a goal in Talk and it
+                         will lay out the steps.</p>
+                       <button onclick="showScreen('conversation')" class="u-label active:scale-95 transition-transform"
+                         style="color:var(--sanguine);">Start one →</button>
+                     </div>`;
                 return;
             }
             host.innerHTML = plans.map(planCardHtml).join('');
@@ -824,32 +1053,38 @@
             });
             const steps = order.map(p => {
                 const items = by[p].map(({ s, i }) =>
-                    `<label class="flex items-start gap-3 py-1.5 cursor-pointer">
+                    `<label class="flex items-start gap-3 py-1.5 cursor-pointer group">
                         <input type="checkbox" ${s.done ? 'checked' : ''}
                             onchange="toggleStep('${plan.id}', ${i}, this.checked)"
-                            style="accent-color:#ff571a" class="mt-1 w-4 h-4 shrink-0 cursor-pointer">
-                        <span class="font-body-md text-sm ${s.done ? 'line-through text-on-surface-variant opacity-60' : 'text-primary'}">${escapeHtml(s.text)}</span>
+                            style="accent-color:#D85A3B" class="mt-1 w-4 h-4 shrink-0 cursor-pointer rounded">
+                        <span class="text-[15px] leading-snug ${s.done ? 'line-through text-muted' : 'text-paper'}">${escapeHtml(s.text)}</span>
                     </label>`).join('');
                 const header = p
-                    ? `<p class="font-label-caps text-label-caps text-on-surface-variant mt-3 mb-1">${escapeHtml(p)}</p>`
-                    : '';
+                    ? `<p class="u-label mt-3 mb-1">${escapeHtml(p)}</p>` : '';
                 return header + items;
             }).join('');
-            const meta = [plan.timeframe, plan.targetDate].filter(Boolean).map(escapeHtml).join(' · ');
-            return `<div class="glass-card bento-border rounded-card p-4 mb-6">
+            const total = (plan.steps || []).length;
+            const done = (plan.steps || []).filter(s => s.done).length;
+            const meta = [plan.timeframe, plan.targetDate ? new Date(plan.targetDate).toLocaleDateString([], { month: 'short', day: 'numeric' }) : null]
+                .filter(Boolean).map(escapeHtml).join(' · ');
+            return `<div class="card p-5">
                 <div class="flex items-start justify-between gap-3 mb-1">
-                    <h3 class="font-headline-md text-headline-md text-primary">${escapeHtml(plan.goal)}</h3>
+                    <h3 class="u-display text-paper text-[22px] font-medium leading-tight">${escapeHtml(plan.goal)}</h3>
                     <button onclick="deletePlan('${plan.id}')" aria-label="Delete plan"
-                        class="text-on-surface-variant active:scale-90 transition-transform shrink-0">
-                        <span class="material-symbols-outlined text-lg">delete</span>
+                        class="text-muted hover:text-sanguine active:scale-90 transition shrink-0 -mt-1">
+                        <span class="material-symbols-outlined" style="font-size:20px;">delete</span>
                     </button>
                 </div>
-                ${meta ? `<p class="font-label-caps text-label-caps text-on-surface-variant mb-2">${meta}</p>` : ''}
-                ${steps}
+                <div class="flex items-center gap-2 mb-3">
+                    ${meta ? `<span class="u-label" style="font-size:9px;">${meta}</span><span class="text-muted">·</span>` : ''}
+                    <span class="u-label" style="font-size:9px;color:var(--sanguine);">${done}/${total} DONE</span>
+                </div>
+                <div class="border-t hair pt-1">${steps}</div>
                 <button onclick="startGuidedSession('${plan.id}')"
-                    class="mt-4 w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-secondary-container/15 border border-secondary-container/30 text-secondary font-label-caps text-label-caps tracking-widest active:scale-95 transition-transform">
-                    <span class="material-symbols-outlined text-base" style="font-variation-settings:'FILL' 1;">videocam</span>
-                    Guide me
+                    class="mt-4 w-full flex items-center justify-center gap-2 py-3 rounded-xl u-label active:scale-95 transition-transform"
+                    style="background:rgba(216,90,59,0.12);border:1px solid rgba(216,90,59,0.3);color:var(--sanguine);font-size:10px;">
+                    <span class="material-symbols-outlined" style="font-size:16px;font-variation-settings:'FILL' 1;">videocam</span>
+                    GUIDE ME WITH THE CAMERA
                 </button>
             </div>`;
         }
@@ -857,29 +1092,20 @@
         async function toggleStep(planId, stepIndex, done) {
             try {
                 await fetch('/api/plans/step', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ planId, stepIndex, done })
                 });
-            } catch (err) {
-                renderPlanner();
-            }
+            } catch (err) { renderPlanner(); }
         }
-
         async function deletePlan(planId) {
-            try {
-                await fetch('/api/plans/' + encodeURIComponent(planId), { method: 'DELETE' });
-                renderPlanner();
-            } catch (err) { /* leave as-is */ }
+            try { await fetch('/api/plans/' + encodeURIComponent(planId), { method: 'DELETE' }); renderPlanner(); }
+            catch (err) { }
         }
-
-        // Launch a guided vision session for a plan: jump to the camera and bind it.
         async function startGuidedSession(planId) {
             showScreen('vision');
             if (window.VisionAgent) VisionAgent.startGuided(planId);
             showGuidedBanner(planId);
         }
-
         async function showGuidedBanner(planId) {
             const banner = document.getElementById('guided-banner');
             const goalEl = document.getElementById('guided-goal');
@@ -890,42 +1116,68 @@
                 const res = await fetch('/api/plans');
                 const plans = res.ok ? (await res.json()).plans || [] : [];
                 const plan = plans.find(p => p.id === planId);
-                if (plan) goalEl.textContent = 'Guiding: ' + plan.goal;
+                if (plan) goalEl.textContent = plan.goal;
             } catch (e) { }
         }
-
         function hideGuidedBanner() {
             const b = document.getElementById('guided-banner');
             if (b) b.classList.add('hidden');
         }
-
         function handleStepChecked(planId, index) {
             const planner = document.getElementById('screen-planner');
             if (planner && planner.classList.contains('active')) renderPlanner();
             const flash = document.getElementById('guided-flash');
             if (flash) { flash.style.opacity = '1'; setTimeout(() => { flash.style.opacity = '0'; }, 1600); }
         }
-
         function showRecap(text) {
-            const g = document.getElementById('guidance');
-            if (g) { g.textContent = text; g.style.opacity = '1'; }
+            showGuidanceText(text);
             try { const u = new SpeechSynthesisUtterance(text); speechSynthesis.speak(u); } catch (e) { }
         }
-
         function appendOfferChip(offer) {
             const wrap = document.createElement('div');
-            wrap.className = 'flex flex-col gap-2 max-w-[85%]';
-            wrap.innerHTML = `
-                <button onclick="startGuidedSession('${offer.planId}')"
-                    class="flex items-center gap-3 p-4 rounded-xl bg-secondary-container/15 border border-secondary-container/30 text-left active:scale-95 transition-transform">
-                    <span class="material-symbols-outlined text-secondary" style="font-variation-settings:'FILL' 1;">videocam</span>
-                    <span class="font-body-md text-sm text-on-surface">${offer.prompt}</span>
+            wrap.className = 'flex flex-col gap-2 max-w-[88%]';
+            wrap.innerHTML =
+                `<button onclick="startGuidedSession('${offer.planId}')"
+                    class="flex items-center gap-3 p-4 rounded-xl text-left active:scale-95 transition-transform"
+                    style="background:rgba(216,90,59,0.12);border:1px solid rgba(216,90,59,0.3);">
+                    <span class="material-symbols-outlined text-sanguine" style="font-variation-settings:'FILL' 1;">videocam</span>
+                    <span class="text-paper text-sm">${escapeHtml(offer.prompt || 'Guide me with the camera')}</span>
                 </button>`;
             transcript.appendChild(wrap);
             scrollToBottom();
         }
 
-        // ========== Memory fetch ==========
+        // shared helper so the vision caption + recap use one path
+        function showGuidanceText(text) {
+            const g = document.getElementById('guidance');
+            if (g) { g.textContent = text; g.style.opacity = text ? '1' : '0'; }
+        }
+
+        // ===================== Connected services (real, from /api/me) =====================
+        function sourceRow(icon, name, sub, on) {
+            return `<div class="flex items-center justify-between p-3 rounded-xl card-soft">
+                <div class="flex items-center gap-3">
+                    <span class="material-symbols-outlined text-paper-dim" style="font-size:20px;font-variation-settings:'wght' 300;">${icon}</span>
+                    <div>
+                        <p class="text-paper text-sm leading-none mb-1">${name}</p>
+                        <p class="u-label" style="font-size:9px;">${sub}</p>
+                    </div>
+                </div>
+                <span class="u-label" style="font-size:9px;color:${on ? 'var(--sanguine)' : '#8A817A'};">
+                    ${on ? 'CONNECTED' : 'OFF'}</span>
+            </div>`;
+        }
+        function renderSources() {
+            const host = document.getElementById('connected-sources');
+            if (!host) return;
+            const c = currentUser?.connected || {};
+            host.innerHTML =
+                sourceRow('mail', 'Gmail', 'Sends mail you approve', !!c.gmail) +
+                sourceRow('calendar_today', 'Calendar', 'Adds and edits events', !!c.calendar) +
+                sourceRow('account_circle', 'Google account', 'Your identity', !!c.google);
+        }
+
+        // ===================== Memory =====================
         async function fetchMemory() {
             const loading = document.getElementById('memory-loading');
             const content = document.getElementById('memory-content');
@@ -941,81 +1193,61 @@
             try {
                 const res = await fetch('/api/memory');
                 const data = await res.json();
-
                 const prefs = data.preferences || {};
                 const patterns = data.past_patterns || [];
                 const facts = data.long_term_facts || [];
-
-                const hasData = Object.keys(prefs).length > 0 || patterns.length > 0 || facts.length > 0;
+                const hasData = Object.keys(prefs).length || patterns.length || facts.length;
 
                 if (!hasData) {
                     if (loading) loading.classList.add('hidden');
                     if (empty) empty.classList.remove('hidden');
                     return;
                 }
-
-                // Render preferences
-                prefsEl.innerHTML = Object.keys(prefs).length === 0
-                    ? '<p class="text-on-surface-variant text-sm opacity-40 italic">None yet</p>'
+                const none = '<p class="text-muted text-sm italic">None yet</p>';
+                prefsEl.innerHTML = Object.keys(prefs).length === 0 ? none
                     : Object.entries(prefs).map(([k, v]) =>
-                        `<div class="flex items-center gap-2 p-2 rounded-lg bg-white/5 border border-white/5">
-                            <span class="text-primary/70 text-xs font-semibold uppercase">${k}:</span>
-                            <span class="text-on-surface-variant text-sm">${v}</span>
-                        </div>`
-                    ).join('');
-
-                // Render patterns
-                patternsEl.innerHTML = patterns.length === 0
-                    ? '<p class="text-on-surface-variant text-sm opacity-40 italic">None yet</p>'
+                        `<div class="flex items-baseline gap-2 p-2.5 rounded-lg card-soft">
+                            <span class="u-label shrink-0" style="font-size:9px;color:var(--sanguine);">${escapeHtml(k)}</span>
+                            <span class="text-paper text-sm">${escapeHtml(v)}</span>
+                        </div>`).join('');
+                patternsEl.innerHTML = patterns.length === 0 ? none
                     : patterns.map(p =>
-                        `<div class="flex items-start gap-2 p-2 rounded-lg bg-white/5 border border-white/5">
-                            <span class="text-secondary-container mt-0.5">•</span>
-                            <span class="text-on-surface-variant text-sm">${p}</span>
-                        </div>`
-                    ).join('');
-
-                // Render facts
-                factsEl.innerHTML = facts.length === 0
-                    ? '<p class="text-on-surface-variant text-sm opacity-40 italic">None yet</p>'
+                        `<div class="flex items-start gap-2.5 p-2.5 rounded-lg card-soft">
+                            <span class="text-sanguine mt-0.5">·</span>
+                            <span class="text-paper text-sm">${escapeHtml(p)}</span>
+                        </div>`).join('');
+                factsEl.innerHTML = facts.length === 0 ? none
                     : facts.map(f =>
-                        `<div class="flex items-start gap-2 p-2 rounded-lg bg-white/5 border border-white/5">
-                            <span class="text-secondary-container mt-0.5">•</span>
-                            <span class="text-on-surface-variant text-sm">${f}</span>
-                        </div>`
-                    ).join('');
+                        `<div class="flex items-start gap-2.5 p-2.5 rounded-lg card-soft">
+                            <span class="text-sanguine mt-0.5">·</span>
+                            <span class="text-paper text-sm">${escapeHtml(f)}</span>
+                        </div>`).join('');
 
                 if (loading) loading.classList.add('hidden');
                 if (content) content.classList.remove('hidden');
             } catch (err) {
                 console.error('Failed to fetch memory:', err);
-                if (loading) loading.textContent = 'Could not load memory.';
+                if (loading) loading.textContent = 'Couldn\'t read the notebook. Try refreshing.';
             }
         }
-
-        // Refresh button
         const memRefreshBtn = document.getElementById('memory-refresh-btn');
         if (memRefreshBtn) memRefreshBtn.addEventListener('click', fetchMemory);
 
-        // ========== Clock / date ==========
+        // ===================== Clock (planner date) =====================
         function tickClock() {
-            const now = new Date();
-            const t = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-            const d = now.toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric' });
-            const clock = document.getElementById('home-clock');
             const pdate = document.getElementById('planner-date');
-            if (clock) clock.textContent = t;
-            if (pdate) pdate.textContent = d;
+            if (pdate) pdate.textContent = new Date()
+                .toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric' }).toUpperCase();
         }
         tickClock(); setInterval(tickClock, 30000);
 
-        // ========== Chat — text input ==========
+        // ===================== Chat =====================
         const transcript = document.getElementById('transcript');
         const chatTextarea = document.getElementById('chat-textarea');
         const sendBtn = document.getElementById('send-btn');
-        let chatHistory = [];   // Gemini multi-turn format: [{role, parts}]
+        let chatHistory = [];
         let isSending = false;
 
-        // Simple markdown-ish rendering (bold, code, lists)
         function renderReply(text) {
             return text
                 .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
@@ -1023,122 +1255,333 @@
                 .replace(/\n/g, '<br>');
         }
 
-        // Auto-grow textarea
         chatTextarea.addEventListener('input', () => {
             chatTextarea.style.height = 'auto';
-            chatTextarea.style.height = Math.min(chatTextarea.scrollHeight, 80) + 'px';
+            chatTextarea.style.height = Math.min(chatTextarea.scrollHeight, 96) + 'px';
         });
-
-        // Enter to send (Shift+Enter for newline)
-        chatTextarea.addEventListener('keydown', (e) => {
-            if (e.key === 'Enter' && !e.shiftKey) {
-                e.preventDefault();
-                handleSend();
-            }
+        chatTextarea.addEventListener('keydown', e => {
+            if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend(); }
         });
         sendBtn.addEventListener('click', handleSend);
 
         function appendBubble(role, html) {
             const wrap = document.createElement('div');
             if (role === 'user') {
-                wrap.className = 'flex flex-col gap-2 max-w-[85%] self-end items-end';
-                wrap.innerHTML = `
-                    <span class="font-label-caps text-[9px] text-on-surface-variant tracking-widest">YOU</span>
-                    <div class="p-5 rounded-xl bg-primary-container text-on-primary-container shadow-lg">
-                        <p class="font-body-md leading-relaxed">${html}</p>
-                    </div>`;
+                wrap.className = 'flex flex-col gap-1.5 max-w-[88%] self-end items-end';
+                wrap.innerHTML =
+                    `<span class="u-label" style="font-size:9px;">YOU</span>
+                     <div class="px-4 py-3 rounded-2xl rounded-br-md bg-paper text-ink">
+                        <p class="leading-relaxed">${html}</p>
+                     </div>`;
             } else {
-                wrap.className = 'flex flex-col gap-2 max-w-[85%]';
-                wrap.innerHTML = `
-                    <span class="font-label-caps text-[9px] text-secondary tracking-widest">DAVINCI</span>
-                    <div class="p-5 rounded-xl bg-white/5 backdrop-blur-md bento-border inner-glow-1px-white-10">
-                        <div class="font-body-md text-on-surface leading-relaxed ai-reply">${html}</div>
-                    </div>`;
+                wrap.className = 'flex flex-col gap-1.5 max-w-[88%] margin';
+                wrap.innerHTML =
+                    `<span class="u-label margin-tick" style="font-size:9px;color:var(--sanguine);">DAVINCI</span>
+                     <div class="px-4 py-3 rounded-2xl rounded-bl-md card">
+                        <div class="text-paper leading-relaxed ai-reply">${html}</div>
+                     </div>`;
             }
             transcript.appendChild(wrap);
             scrollToBottom();
             return wrap;
         }
-
         function showTyping() {
             const wrap = document.createElement('div');
-            wrap.className = 'flex flex-col gap-2 max-w-[85%]';
+            wrap.className = 'flex flex-col gap-1.5 max-w-[88%] margin';
             wrap.id = 'typing-bubble';
-            wrap.innerHTML = `
-                <span class="font-label-caps text-[9px] text-secondary tracking-widest">DAVINCI</span>
-                <div class="p-3 rounded-xl bg-white/5 backdrop-blur-md bento-border inner-glow-1px-white-10">
-                    <div class="typing-indicator"><span></span><span></span><span></span></div>
-                </div>`;
+            wrap.innerHTML =
+                `<span class="u-label margin-tick" style="font-size:9px;color:var(--sanguine);">DAVINCI</span>
+                 <div class="rounded-2xl rounded-bl-md card"><div class="typing"><span></span><span></span><span></span></div></div>`;
             transcript.appendChild(wrap);
             scrollToBottom();
         }
-
         function removeTyping() {
             const el = document.getElementById('typing-bubble');
             if (el) el.remove();
         }
-
         function scrollToBottom() {
             const main = transcript.closest('main');
             if (main) setTimeout(() => main.scrollTop = main.scrollHeight, 50);
         }
 
-        async function handleSend() {
+        // Text fallback path → shared submit.
+        function handleSend() {
             const text = chatTextarea.value.trim();
-            if (!text || isSending) return;
-            isSending = true;
-
-            // Show user bubble
-            appendBubble('user', text.replace(/</g, '&lt;').replace(/>/g, '&gt;'));
+            if (!text) return;
             chatTextarea.value = '';
             chatTextarea.style.height = 'auto';
+            submitMessage(text, false);
+        }
 
-            // Show typing indicator
+        // One path for both channels. `spoken` = the turn came from voice, so the
+        // reply should be spoken back (unless muted). Typed turns stay silent —
+        // if you chose to type, you probably want quiet.
+        async function submitMessage(text, spoken) {
+            if (!text || isSending) return;
+            isSending = true;
+            appendBubble('user', text.replace(/</g, '&lt;').replace(/>/g, '&gt;'));
             showTyping();
-
             try {
                 const res = await fetch('/api/chat', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ message: text, history: chatHistory }),
                 });
                 const data = await res.json();
                 removeTyping();
-
                 if (data.error) {
-                    appendBubble('model', `<span class="text-error">⚠ ${data.error}</span>`);
+                    appendBubble('model', `<span style="color:var(--sanguine);">Something went wrong: ${escapeHtml(data.error)}</span>`);
+                    Voice.idle();
                 } else {
                     appendBubble('model', renderReply(data.reply));
-                    // Update history for multi-turn
                     chatHistory.push({ role: 'user', parts: [{ text }] });
                     chatHistory.push({ role: 'model', parts: [{ text: data.reply }] });
-
                     if (data.offer && data.offer.planId) appendOfferChip(data.offer);
+                    if (spoken) Voice.reply(data.reply); else Voice.idle();
                 }
             } catch (err) {
                 removeTyping();
-                appendBubble('model', `<span class="text-error">⚠ Network error — is the server running?</span>`);
+                appendBubble('model', `<span style="color:var(--sanguine);">Can't reach DaVinci. Check that the server is running.</span>`);
+                Voice.idle();
                 console.error(err);
             }
             isSending = false;
         }
 
-        // ========== Decorative waveform ==========
-        const waveform = document.getElementById('waveform');
-        if (waveform) {
-            for (let i = 0; i < 40; i++) {
-                const bar = document.createElement('div');
-                bar.className = 'w-[2px] rounded-full transition-all duration-300';
-                bar.style.height = '4px';
-                bar.style.backgroundColor = 'rgba(255,255,255,0.1)';
-                waveform.appendChild(bar);
-            }
+        function seedConversation() {
+            if (transcript.children.length) return;
+            const name = currentUser?.displayName ? currentUser.displayName.split(' ')[0] : null;
+            appendBubble('model', renderReply(
+                name ? `Hi ${name} — what are we working on? I can answer questions, build a plan, send an email, or watch through your camera.`
+                    : `Hi — what are we working on? I can answer questions, build a plan, send an email, or watch through your camera.`
+            ));
         }
 
-        // ========== VISION: perception module wiring ==========
+        // ===================== Voice — STT in, TTS out (the primary channel) =====================
+        const Voice = (() => {
+            const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+            const supportsSTT = !!SR;
+            const supportsTTS = 'speechSynthesis' in window;
+
+            const root = document.getElementById('voice');
+            const orb = document.getElementById('voice-orb');
+            const icon = document.getElementById('voice-icon');
+            const statusEl = document.getElementById('voice-status');
+            const captionEl = document.getElementById('voice-caption');
+            const muteBtn = document.getElementById('voice-mute');
+            const textToggle = document.getElementById('text-toggle');
+            const textRow = document.getElementById('text-row');
+            const canvas = document.getElementById('wave');
+            const ctx2d = canvas ? canvas.getContext('2d') : null;
+
+            let recognition = null, listening = false, speaking = false, finalText = '';
+            let muted = false;
+            try { muted = localStorage.getItem('dv_muted') === '1'; } catch (e) { }
+
+            let audioCtx = null, analyser = null, micStream = null, rafId = null;
+
+            const LABELS = { idle: 'TAP TO SPEAK', listening: 'LISTENING…', thinking: 'THINKING…', speaking: 'TAP TO STOP' };
+            const ICONS = { idle: 'mic', listening: 'graphic_eq', thinking: 'more_horiz', speaking: 'stop' };
+
+            function setState(s) {
+                if (!root) return;
+                root.classList.remove('is-idle', 'is-listening', 'is-thinking', 'is-speaking');
+                root.classList.add('is-' + s);
+                if (statusEl) statusEl.textContent = supportsSTT ? LABELS[s] : 'TYPE — DAVINCI WILL SPEAK';
+                if (icon) icon.textContent = ICONS[s];
+            }
+            function setCaption(t) {
+                if (!captionEl) return;
+                captionEl.textContent = t || '';
+                captionEl.style.opacity = t ? '1' : '0';
+            }
+
+            // --- real mic-amplitude waveform ---
+            async function startWave() {
+                if (!ctx2d) return;
+                try { micStream = await navigator.mediaDevices.getUserMedia({ audio: true }); }
+                catch (e) { micStream = null; return; } // no amplitude → orb ring still signals listening
+                try {
+                    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                    const src = audioCtx.createMediaStreamSource(micStream);
+                    analyser = audioCtx.createAnalyser();
+                    analyser.fftSize = 256;
+                    src.connect(analyser);
+                    const data = new Uint8Array(analyser.frequencyBinCount);
+                    const sanguine = (getComputedStyle(document.documentElement).getPropertyValue('--sanguine') || '#D85A3B').trim();
+                    const draw = () => {
+                        rafId = requestAnimationFrame(draw);
+                        const dpr = window.devicePixelRatio || 1;
+                        const w = canvas.width = canvas.offsetWidth * dpr;
+                        const h = canvas.height = canvas.offsetHeight * dpr;
+                        analyser.getByteTimeDomainData(data);
+                        ctx2d.clearRect(0, 0, w, h);
+                        ctx2d.lineWidth = 2 * dpr;
+                        ctx2d.strokeStyle = sanguine;
+                        ctx2d.beginPath();
+                        const slice = w / data.length;
+                        for (let i = 0; i < data.length; i++) {
+                            const v = data[i] / 128.0, y = (v * h) / 2, x = i * slice;
+                            i === 0 ? ctx2d.moveTo(x, y) : ctx2d.lineTo(x, y);
+                        }
+                        ctx2d.stroke();
+                    };
+                    draw();
+                } catch (e) { /* analyser unsupported → ring-only listening state */ }
+            }
+            function stopWave() {
+                if (rafId) { cancelAnimationFrame(rafId); rafId = null; }
+                if (ctx2d && canvas) ctx2d.clearRect(0, 0, canvas.width, canvas.height);
+                if (micStream) { micStream.getTracks().forEach(t => t.stop()); micStream = null; }
+                if (audioCtx) { audioCtx.close().catch(() => { }); audioCtx = null; }
+                analyser = null;
+            }
+
+            // --- speech recognition (input) ---
+            function startListen() {
+                if (!supportsSTT || listening) return;
+                cancelSpeak(); // barge-in: talking over DaVinci stops it
+                finalText = '';
+                try {
+                    recognition = new SR();
+                    recognition.lang = navigator.language || 'en-US';
+                    recognition.interimResults = true;
+                    recognition.continuous = false;
+                    recognition.onresult = (e) => {
+                        let interim = '';
+                        for (let i = e.resultIndex; i < e.results.length; i++) {
+                            const r = e.results[i];
+                            if (r.isFinal) finalText += r[0].transcript;
+                            else interim += r[0].transcript;
+                        }
+                        setCaption((finalText + ' ' + interim).trim());
+                    };
+                    recognition.onerror = (e) => {
+                        listening = false; stopWave();
+                        const map = {
+                            'not-allowed': 'Mic is blocked — allow it in your browser, or type below.',
+                            'service-not-allowed': 'Mic is blocked — allow it in your browser, or type below.',
+                            'no-speech': "Didn't catch that — tap to try again, or type.",
+                            'audio-capture': 'No microphone found — you can type instead.',
+                            'network': 'Voice service unreachable — type below for now.',
+                        };
+                        setCaption(map[e.error] || 'Voice hiccup — tap to retry, or type.');
+                        setState('idle');
+                        if (e.error === 'not-allowed' || e.error === 'audio-capture') showText(true);
+                    };
+                    recognition.onend = () => {
+                        if (!listening) return; // already aborted/errored
+                        listening = false; stopWave();
+                        const said = finalText.trim();
+                        if (said) { setCaption(''); setState('thinking'); submitMessage(said, true); }
+                        else setState('idle');
+                    };
+                    listening = true;
+                    setState('listening');
+                    setCaption('');
+                    startWave();
+                    recognition.start();
+                } catch (e) { listening = false; setState('idle'); console.error(e); }
+            }
+            function stopListen() {
+                if (!listening) return;
+                try { recognition && recognition.stop(); } catch (e) { } // onend submits if we heard something
+            }
+            function abortListen() {
+                if (!listening && !recognition) return;
+                listening = false;
+                try { recognition && recognition.abort(); } catch (e) { }
+                stopWave(); setCaption(''); setState('idle');
+            }
+
+            // --- speech synthesis (output) ---
+            let chosenVoice = null;
+            function pickVoice() {
+                if (!supportsTTS) return;
+                const vs = speechSynthesis.getVoices();
+                if (!vs.length) return;
+                chosenVoice =
+                    vs.find(v => /^en[-_]US/i.test(v.lang) && /natural|google|samantha/i.test(v.name)) ||
+                    vs.find(v => /^en/i.test(v.lang)) || vs[0];
+            }
+            if (supportsTTS) { pickVoice(); speechSynthesis.onvoiceschanged = pickVoice; }
+
+            function forSpeech(md) {
+                return String(md).replace(/[*_`#>]/g, '').replace(/\n+/g, '. ').replace(/\s+/g, ' ').trim();
+            }
+            function speak(text) {
+                if (!supportsTTS || muted || !text) { setState('idle'); return; }
+                try {
+                    speechSynthesis.cancel();
+                    const u = new SpeechSynthesisUtterance(text);
+                    if (chosenVoice) u.voice = chosenVoice;
+                    u.rate = 1.0; u.pitch = 1.0;
+                    u.onstart = () => { speaking = true; setState('speaking'); };
+                    u.onend = () => { speaking = false; if (!listening) setState('idle'); };
+                    u.onerror = () => { speaking = false; if (!listening) setState('idle'); };
+                    speechSynthesis.speak(u);
+                } catch (e) { speaking = false; setState('idle'); }
+            }
+            function cancelSpeak() {
+                if (supportsTTS) { try { speechSynthesis.cancel(); } catch (e) { } }
+                speaking = false;
+            }
+
+            // --- UI ---
+            function showText(force) {
+                if (!textRow) return;
+                const show = force === undefined ? textRow.hasAttribute('hidden') : force;
+                if (show) {
+                    textRow.removeAttribute('hidden');
+                    const ta = document.getElementById('chat-textarea');
+                    if (ta) ta.focus();
+                } else textRow.setAttribute('hidden', '');
+            }
+            function syncMuteUI() {
+                if (!muteBtn) return;
+                const i = muteBtn.querySelector('.material-symbols-outlined');
+                if (i) i.textContent = muted ? 'volume_off' : 'volume_up';
+                muteBtn.setAttribute('aria-pressed', String(muted));
+            }
+            function toggleMute() {
+                muted = !muted;
+                try { localStorage.setItem('dv_muted', muted ? '1' : '0'); } catch (e) { }
+                if (muted) cancelSpeak();
+                syncMuteUI();
+            }
+            function onOrb() {
+                if (speaking) { cancelSpeak(); setState('idle'); return; } // tap to stop DaVinci
+                if (listening) { stopListen(); return; }
+                if (!supportsSTT) { showText(true); return; }
+                startListen();
+            }
+
+            function init() {
+                if (!root) return;
+                syncMuteUI();
+                if (orb) orb.addEventListener('click', onOrb);
+                if (muteBtn) muteBtn.addEventListener('click', toggleMute);
+                if (textToggle) textToggle.addEventListener('click', () => showText());
+                if (!supportsSTT) {
+                    // No speech recognition in this browser: lead with text, keep spoken replies.
+                    showText(true);
+                    if (orb) orb.setAttribute('aria-label', 'Voice input not supported here — type below');
+                }
+                setState('idle');
+            }
+
+            return {
+                init,
+                reply: (md) => speak(forSpeech(md)), // speak a model reply (markdown stripped)
+                idle: () => { if (!speaking && !listening) setState('idle'); },
+                cancelAll: () => { abortListen(); cancelSpeak(); setState('idle'); },
+                isMuted: () => muted,
+            };
+        })();
+
+        // ===================== Vision wiring (unchanged behavior) =====================
         VisionAgent.init({
             videoEl: document.getElementById('feed'),
-            guidanceEl: document.getElementById('guidance'),
+            guidanceEl: document.getElementById('guidance'),     // kept for fallback callers
             stateEl: document.getElementById('vision-state'),
             dotEl: document.getElementById('vision-dot'),
             statusEl: document.getElementById('status'),
@@ -1146,12 +1589,9 @@
             stopEl: document.getElementById('stopBtn'),
             sessionId: 'sess_' + Math.random().toString(36).slice(2, 8),
             taskContext: { task: null, mode: 'coach' },
-            // The vision bridge: forward each observation to the orchestrator and
-            // return the directive (guidance / watch_for / done) for the client to act on.
             orchestrate: async (observation, snapshot) => {
                 const r = await fetch('/api/orchestrate', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ session_id: snapshot.sessionId, observation, session: snapshot.session }),
                 });
                 if (!r.ok) return null;
@@ -1174,19 +1614,23 @@
             },
         });
         document.getElementById('startBtn').addEventListener('click', () => VisionAgent.start());
-        document.getElementById('stopBtn').addEventListener('click', () => {
-            VisionAgent.stop();
-            hideGuidedBanner();
-        });
+        document.getElementById('stopBtn').addEventListener('click', () => { VisionAgent.stop(); hideGuidedBanner(); });
         (function () {
             const vq = document.getElementById('vision-question');
             const ask = () => { VisionAgent.ask(vq.value.trim()); vq.value = ''; };
             document.getElementById('vision-ask-btn').addEventListener('click', ask);
-            vq.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); ask(); } });
+            vq.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); ask(); } });
         })();
 
-        // ========== Init ==========
-        // ========== Auth gate ==========
+        // ===================== Status pill =====================
+        function setStatus(text, on) {
+            const dot = document.getElementById('status-dot');
+            const t = document.getElementById('status-text');
+            if (t) t.textContent = text;
+            if (dot) { dot.style.background = on ? 'var(--sanguine)' : '#8A817A'; dot.classList.toggle('on', !!on); }
+        }
+
+        // ===================== Auth gate / bootstrap =====================
         let currentUser = null;
         async function bootstrap() {
             try {
@@ -1195,9 +1639,12 @@
                 currentUser = await res.json();
                 document.getElementById('auth-gate').style.display = 'none';
                 renderIdentity();
+                setStatus(currentUser?.connected?.google ? 'CONNECTED' : 'SIGNED IN', true);
+                seedConversation();
                 showScreen('home');
             } catch {
                 document.getElementById('auth-gate').style.display = 'flex';
+                setStatus('SIGNED OUT', false);
             }
         }
         function renderIdentity() {
@@ -1208,27 +1655,9 @@
             try { await fetch('/api/auth/logout', { method: 'POST' }); } catch { }
             location.reload();
         }
+        Voice.init();
         bootstrap();
     </script>
-    <div id="auth-gate" class="fixed inset-0 z-[100] bg-background flex items-center justify-center px-margin-mobile"
-        style="display:none;">
-        <div class="glass-card bento-border rounded-bento p-8 max-w-sm w-full text-center">
-            <div class="flex items-center justify-center gap-2 mb-6">
-                <span class="material-symbols-outlined text-primary"
-                    style="font-variation-settings:'FILL' 1;">terminal</span>
-                <span class="font-label-caps text-label-caps tracking-widest text-primary">DAVINCI</span>
-            </div>
-            <h2 class="font-headline-md text-headline-md text-primary mb-2">Sign in to continue</h2>
-            <p class="font-body-md text-on-surface-variant text-sm mb-6">DaVinci reasons over your calendar and files.
-                Sign
-                in with Google to begin.</p>
-            <a href="/api/auth/google"
-                class="block w-full bg-primary text-background py-3 rounded-xl font-label-caps text-label-caps tracking-widest active:scale-95 transition-transform">
-                Continue with Google
-            </a>
-        </div>
-    </div>
-
 </body>
 
 </html>

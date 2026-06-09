@@ -14,7 +14,8 @@
  *   GET  /api/me                    -> current user + connected capabilities
  *   POST /api/chat        (auth)    -> { message } -> { reply }
  *   POST /api/vision      (auth)    -> { image, tier?, ... } -> v1.0 envelope
- *   POST /api/orchestrate (auth)    -> { observation } -> directive
+ *   POST /api/orchestrate (auth)    -> { observation } -> directive (+ step_checked)
+ *   POST /api/vision/session/end (auth) -> { planId, summaries } -> { recap }
  *   static public/
  */
 var __importDefault = (this && this.__importDefault) || function (mod) {
@@ -405,16 +406,95 @@ app.post("/api/orchestrate", middleware_1.requireAuth, async (req, res) => {
         await commitPlanUpsert(ctx, userId);
         await store.save(userId, ctx.state);
         const directive = (result.data || {}).result || {};
+        // FIX: actually perform the guided step check-off the vision agent decided
+        // on. The agent only ever returns a validated, not-yet-done step index
+        // (see VisionAgent.validateStepAction), but the write itself is the
+        // server's job — plans live in their own store. We perform it here and
+        // tell the client which index changed via `step_checked`, which is the
+        // field public/index.html's orchestrate callback already listens for.
+        // Without this, the headline "DaVinci checks steps off as it watches"
+        // silently did nothing.
+        let stepChecked = null;
+        if (session?.mode === "guided" &&
+            session.planId &&
+            typeof directive.step_action === "number") {
+            try {
+                const updated = await plans.setStepDone(userId, session.planId, directive.step_action, true);
+                if (updated)
+                    stepChecked = directive.step_action;
+            }
+            catch (e) {
+                console.error("[orchestrate] step check-off failed:", e);
+            }
+        }
         res.json({
             guidance: result.message || "",
             watch_for: directive.watch_for ?? null,
             done: !!directive.done,
             done_message: directive.done_message || "",
+            step_checked: stepChecked,
         });
     }
     catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         console.error("Orchestrate error:", msg);
+        res.status(500).json({ error: msg });
+    }
+});
+// POST /api/vision/session/end -----------------------------------------------
+// FIX: this route did not exist — public/index.html's onSessionEnd has always
+// POSTed here when a guided session ends, so the call 404'd and the spoken
+// recap never happened. It takes the scene log the client accrued during the
+// session and returns ONE warm spoken-style recap line. (Persisting the session
+// as reviewable "field notes" and extracting durable memory from it are separate
+// follow-ups, intentionally not done here.)
+app.post("/api/vision/session/end", middleware_1.requireAuth, async (req, res) => {
+    try {
+        const { planId, summaries } = req.body;
+        const userId = req.userId;
+        const log = Array.isArray(summaries)
+            ? summaries.filter((s) => typeof s === "string" && s.trim().length > 0)
+            : [];
+        // Nothing observed — nothing to recap. Honest empty result.
+        if (log.length === 0)
+            return res.json({ recap: "" });
+        let plan = null;
+        if (planId) {
+            try {
+                plan = await plans.getPlan(userId, planId);
+            }
+            catch {
+                plan = null;
+            }
+        }
+        const planLine = plan
+            ? `The user was being guided hands-on through: "${plan.goal}".`
+            : "The user just finished a guided camera session.";
+        const recapSystem = "You are DaVinci, wrapping up a hands-on guided session you just walked " +
+            "the user through. You are given a time-ordered log of what the camera " +
+            "saw. Write ONE warm, natural spoken sentence (two at most) recapping " +
+            "what they got done — like a person who was standing beside them. No " +
+            "lists, no markdown, and never mention cameras, logs, frames, or that " +
+            "you are an assistant.";
+        const recapUser = `${planLine}\n\nWhat was seen, in order:\n` +
+            `${log.map((s, i) => `${i + 1}. ${s}`).join("\n")}\n\n` +
+            "Write the recap now.";
+        let recap = "";
+        try {
+            recap = (await gemini.complete([
+                { role: "system", content: recapSystem },
+                { role: "user", content: recapUser },
+            ], { temperature: 0.5 })).trim();
+        }
+        catch (e) {
+            console.error("[session/end] recap generation failed:", e);
+            // Non-fatal: return an empty recap rather than erroring the client.
+        }
+        res.json({ recap });
+    }
+    catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        console.error("Session end error:", msg);
         res.status(500).json({ error: msg });
     }
 });

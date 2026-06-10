@@ -617,6 +617,12 @@
                 </p>
             </div>
 
+            <!-- needs your attention (proactive: brief + sentinel) -->
+            <div id="home-attention" class="margin mb-7 hidden">
+                <p class="u-label margin-tick mb-3">Needs your attention</p>
+                <div id="attention-list" class="space-y-3"></div>
+            </div>
+
             <!-- today / real state from /api/plans -->
             <div class="margin">
                 <div class="flex items-center justify-between mb-3 margin-tick">
@@ -917,6 +923,12 @@
             <a href="/api/auth/google"
                 class="block w-full bg-paper text-ink py-3.5 rounded-xl u-label active:scale-95 transition-transform"
                 style="font-size:11px;color:#14110F;">CONTINUE WITH GOOGLE</a>
+            <p class="text-paper-dim mt-5 leading-relaxed" style="font-size:11px;">
+                By continuing you agree to our
+                <a href="/terms.html" class="underline" style="color:var(--sanguine);">Terms of Service</a>
+                and
+                <a href="/privacy.html" class="underline" style="color:var(--sanguine);">Privacy Policy</a>.
+            </p>
         </div>
     </div>
 
@@ -939,7 +951,7 @@
                 hideGuidedBanner();
             }
             window.scrollTo(0, 0);
-            if (name === 'home') renderHome();
+            if (name === 'home') { renderHome(); renderNotifications(); }
             if (name === 'memory') { fetchMemory(); renderSources(); renderRecallStatus(); }
             if (name === 'planner') renderPlanner();
         }
@@ -1013,7 +1025,46 @@
                 }
             } catch (e) { }
         }
-
+        // ===================== Needs your attention (proactive) =====================
+        async function renderNotifications() {
+            const wrap = document.getElementById('home-attention');
+            const list = document.getElementById('attention-list');
+            if (!wrap || !list) return;
+            let notes = [];
+            try {
+                const r = await fetch('/api/notifications?unread=1');
+                if (r.ok) notes = (await r.json()).notifications || [];
+            } catch (e) { }
+            if (!notes.length) { wrap.classList.add('hidden'); list.innerHTML = ''; return; }
+            wrap.classList.remove('hidden');
+            list.innerHTML = notes.map(noteCardHtml).join('');
+        }
+        function noteCardHtml(n) {
+            const isAlert = n.kind === 'alert';
+            const icon = isAlert ? 'warning' : 'wb_sunny';
+            return `<div class="card p-4">
+                <div class="flex items-start gap-3">
+                    <span class="material-symbols-outlined ${isAlert ? 'text-sanguine' : 'text-paper-dim'}"
+                        style="font-size:20px;font-variation-settings:'FILL' 1;">${icon}</span>
+                    <div class="flex-1 min-w-0">
+                        <p class="u-label mb-1" style="font-size:9px;${isAlert ? 'color:var(--sanguine);' : ''}">${escapeHtml((n.title || '').toUpperCase())}</p>
+                        <p class="text-paper text-sm leading-snug" style="white-space:pre-wrap;">${escapeHtml(n.body || '')}</p>
+                    </div>
+                    <button onclick="dismissNote('${n.id}')" class="text-muted hover:text-paper active:scale-90 transition shrink-0" aria-label="Dismiss">
+                        <span class="material-symbols-outlined" style="font-size:18px;">close</span>
+                    </button>
+                </div>
+            </div>`;
+        }
+        async function dismissNote(id) {
+            try {
+                await fetch('/api/notifications/read', {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ id }),
+                });
+            } catch (e) { }
+            renderNotifications();
+        }
         // ===================== Planner =====================
         async function renderPlanner() {
             const host = document.getElementById('plans-list');

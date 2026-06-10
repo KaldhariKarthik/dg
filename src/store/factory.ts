@@ -4,6 +4,7 @@ import { PlanStore } from "./planStore";
 import { DocumentStore, FileDocumentStore, FirestoreDocumentStore } from "./documentStore";
 import { UserStore, SessionStore } from "../auth/stores";
 import { getFirestore } from "./firebase";
+import { NotificationStore, FileNotificationStore, FirestoreNotificationStore } from "./notificationStore";
 import {
     FileStore,
     FileUserStore,
@@ -26,6 +27,7 @@ export interface Stores {
     memory: MemoryStore;
     plans: PlanStore;
     documents: DocumentStore;
+    notifications: NotificationStore;
     backend: "firestore" | "file";
 }
 
@@ -43,6 +45,7 @@ export function buildStores(): Stores {
             memory: new FirestoreMemoryStore(db),
             plans: new FirestorePlanStore(db),
             documents: new FirestoreDocumentStore(db),
+            notifications: new FirestoreNotificationStore(db),
             backend: "firestore",
         };
     }
@@ -71,6 +74,7 @@ export function buildStores(): Stores {
         memory: new FileMemoryStore(),
         plans: new FilePlanStore(),
         documents: new FileDocumentStore(),
+        notifications: new FileNotificationStore(),
         backend: "file",
     };
 }

@@ -73,11 +73,13 @@ import { GoogleDriveAdapter } from "./adapters/drive";
 import { Embedder } from "./recall/embeddings";
 import { RecallService } from "./recall/recall";
 import { mountRecallRoutes } from "./recall/routes";
+import { ProactiveService } from "./proactive/proactive";
+import { mountProactiveRoutes } from "./proactive/routes";
 
 // --- config -----------------------------------------------------------------
 const PORT = process.env.PORT ? Number(process.env.PORT) : 8080;
 const apiKey = (process.env.GEMINI_API_KEY ?? process.env.API_KEY ?? "").trim();
-
+const cronKey = (process.env.CRON_KEY ?? "").trim();
 const VISION_MODEL_FAST = "gemini-3.1-flash-lite";
 const VISION_MODEL_DEEP = "gemini-3.5-flash";
 const VISION_TIMEOUT_MS = 25_000;
@@ -150,7 +152,7 @@ const calendarFactory = (userId: string) => new GoogleCalendarAdapter(googleApiA
 const driveFactory = (userId: string) => new GoogleDriveAdapter(googleApiAuth, userId);
 const embedder = new Embedder(apiKey);
 const recall = new RecallService(stores.documents, embedder, driveFactory);
-
+const proactive = new ProactiveService(stores.notifications, plans, memoryStore, calendarFactory, gemini);
 const registry = new AgentRegistry();
 registry.register(new ResearcherAgent(gemini));
 registry.register(new PlannerAgent(gemini));
@@ -194,7 +196,7 @@ app.use(express.static("public"));
 // `requireAuth`, and `recall` all exist. getUserId mirrors how the other
 // protected routes read identity (req.userId, set by attachUser).
 mountRecallRoutes(app, requireAuth, recall, (req) => (req as any).userId ?? null);
-
+mountProactiveRoutes(app, requireAuth, proactive, stores.notifications, (req) => (req as any).userId ?? null, cronKey);
 /* ============================ AUTH ROUTES ============================== */
 
 // GET /api/auth/google — begin login. Sets an anti-CSRF state cookie and

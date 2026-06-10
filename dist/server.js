@@ -67,9 +67,12 @@ const drive_1 = require("./adapters/drive");
 const embeddings_1 = require("./recall/embeddings");
 const recall_1 = require("./recall/recall");
 const routes_1 = require("./recall/routes");
+const proactive_1 = require("./proactive/proactive");
+const routes_2 = require("./proactive/routes");
 // --- config -----------------------------------------------------------------
 const PORT = process.env.PORT ? Number(process.env.PORT) : 8080;
 const apiKey = (process.env.GEMINI_API_KEY ?? process.env.API_KEY ?? "").trim();
+const cronKey = (process.env.CRON_KEY ?? "").trim();
 const VISION_MODEL_FAST = "gemini-3.1-flash-lite";
 const VISION_MODEL_DEEP = "gemini-3.5-flash";
 const VISION_TIMEOUT_MS = 25_000;
@@ -131,6 +134,7 @@ const calendarFactory = (userId) => new calendar_1.GoogleCalendarAdapter(googleA
 const driveFactory = (userId) => new drive_1.GoogleDriveAdapter(googleApiAuth, userId);
 const embedder = new embeddings_1.Embedder(apiKey);
 const recall = new recall_1.RecallService(stores.documents, embedder, driveFactory);
+const proactive = new proactive_1.ProactiveService(stores.notifications, plans, memoryStore, calendarFactory, gemini);
 const registry = new registry_1.AgentRegistry();
 registry.register(new researcher_1.ResearcherAgent(gemini));
 registry.register(new planner_1.PlannerAgent(gemini));
@@ -165,6 +169,7 @@ app.use(express_1.default.static("public"));
 // `requireAuth`, and `recall` all exist. getUserId mirrors how the other
 // protected routes read identity (req.userId, set by attachUser).
 (0, routes_1.mountRecallRoutes)(app, middleware_1.requireAuth, recall, (req) => req.userId ?? null);
+(0, routes_2.mountProactiveRoutes)(app, middleware_1.requireAuth, proactive, stores.notifications, (req) => req.userId ?? null, cronKey);
 /* ============================ AUTH ROUTES ============================== */
 // GET /api/auth/google — begin login. Sets an anti-CSRF state cookie and
 // redirects to Google's consent screen (identity + Gmail + Calendar + Drive).

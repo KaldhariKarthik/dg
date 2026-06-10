@@ -3,6 +3,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.buildStores = buildStores;
 const documentStore_1 = require("./documentStore");
 const firebase_1 = require("./firebase");
+const notificationStore_1 = require("./notificationStore");
 const file_1 = require("./backends/file");
 const firestore_1 = require("./backends/firestore");
 function buildStores() {
@@ -18,6 +19,7 @@ function buildStores() {
             memory: new firestore_1.FirestoreMemoryStore(db),
             plans: new firestore_1.FirestorePlanStore(db),
             documents: new documentStore_1.FirestoreDocumentStore(db),
+            notifications: new notificationStore_1.FirestoreNotificationStore(db),
             backend: "firestore",
         };
     }
@@ -39,6 +41,7 @@ function buildStores() {
         memory: new file_1.FileMemoryStore(),
         plans: new file_1.FilePlanStore(),
         documents: new documentStore_1.FileDocumentStore(),
+        notifications: new notificationStore_1.FileNotificationStore(),
         backend: "file",
     };
 }

@@ -67,7 +67,18 @@ export interface CalendarEventPatch {
     /** Full replacement attendee list, if provided. */
     attendees?: string[];
 }
+export interface CalendarBusySlot {
+    start: string; // RFC3339
+    end: string;
+}
 
+export interface CalendarEventSummary {
+    id: string;
+    summary: string;
+    start: string | null; // dateTime (or date for all-day), as returned
+    end: string | null;
+    location?: string;
+}
 export interface CalendarAdapter {
     /** Create an event on the user's primary calendar. */
     createEvent(event: CalendarEvent): Promise<CalendarCreateResult>;
@@ -76,7 +87,13 @@ export interface CalendarAdapter {
         eventId: string,
         patch: CalendarEventPatch
     ): Promise<CalendarCreateResult>;
+    /** Busy blocks on the user's primary calendar in [timeMin, timeMax]. */
+    freeBusy(timeMin: string, timeMax: string): Promise<CalendarBusySlot[]>;
+    /** Events on the primary calendar in [timeMin, timeMax], time-ordered. */
+    listEvents(timeMin: string, timeMax: string, maxResults?: number): Promise<CalendarEventSummary[]>;
 }
+
+
 
 /* ----------------------------------------------------------------------------
  *  Future adapters (Spotify, etc.) slot in here with the same shape.

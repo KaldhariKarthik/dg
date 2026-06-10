@@ -7,14 +7,16 @@ class LiveSession {
     clientWs;
     userId;
     cfg;
+    timeZone;
     ai;
     session = null;
     closed = false;
     tools;
-    constructor(clientWs, userId, cfg) {
+    constructor(clientWs, userId, cfg, timeZone = "UTC") {
         this.clientWs = clientWs;
         this.userId = userId;
         this.cfg = cfg;
+        this.timeZone = timeZone;
         this.ai = new genai_1.GoogleGenAI({ apiKey: cfg.apiKey });
         this.tools = new tools_1.LiveToolRunner(userId, cfg.deps, (event, data) => this.toClient({ type: "tool_event", event, data }));
     }
@@ -65,7 +67,17 @@ class LiveSession {
             return `- "${p.goal}" (id: ${p.id}, ${done}/${p.steps.length} done)`;
         }).join("\n") || "(none yet)";
         const prefs = Object.entries(mem.preferences).map(([k, v]) => `${k}: ${v}`).join("; ") || "none";
-        return ("\n\nWhat you already know about this user (use naturally, don't recite):\n" +
+        const now = new Date();
+        const nowLocal = new Intl.DateTimeFormat("en-US", {
+            timeZone: this.timeZone,
+            weekday: "long", year: "numeric", month: "long", day: "numeric",
+            hour: "numeric", minute: "2-digit", timeZoneName: "short",
+        }).format(now);
+        const timeContext = `\n\nThe current date and time is ${nowLocal} (${this.timeZone}); ISO ${now.toISOString()}. ` +
+            `Treat this as "now" when interpreting "today", "tomorrow", "this afternoon", "next week", etc., ` +
+            `and always pass RFC3339 timestamps with the correct offset to the calendar tools.`;
+        return (timeContext +
+            "\n\nWhat you already know about this user (use naturally, don't recite):\n" +
             `Plans:\n${planLines}\n` +
             `Preferences: ${prefs}\n` +
             `Patterns: ${mem.past_patterns.join("; ") || "none"}\n` +

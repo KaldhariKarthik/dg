@@ -23,7 +23,9 @@ function attachLiveServer(httpServer, sessions, cfg) {
             if (!session)
                 return reject();
             wss.handleUpgrade(req, socket, head, (ws) => {
-                const live = new liveSession_1.LiveSession(ws, session.userId, cfg);
+                const reqUrl = new URL(req.url ?? "/live", "http://localhost");
+                const timeZone = reqUrl.searchParams.get("tz") || process.env.TZ || "UTC";
+                const live = new liveSession_1.LiveSession(ws, session.userId, cfg, timeZone);
                 void live.start();
             });
         }).catch(reject);

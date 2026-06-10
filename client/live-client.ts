@@ -61,7 +61,8 @@ const LiveClient = (() => {
 
     function wsUrl(): string {
         const proto = location.protocol === "https:" ? "wss:" : "ws:";
-        return `${proto}//${location.host}/live`;
+        const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || "";
+        return `${proto}//${location.host}/live` + (tz ? `?tz=${encodeURIComponent(tz)}` : "");
     }
     function makeContext(rate: number): AudioContext {
         try { return new AudioContext({ sampleRate: rate }); }

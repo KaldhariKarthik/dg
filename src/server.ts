@@ -89,7 +89,11 @@ const LIVE_SYSTEM =
     "to confirm; only call send_email after they clearly agree. For calendar, " +
     "always propose_event first and confirm before create_event. Never send or " +
     "create without a spoken yes. If they're working with their hands, guide one " +
-    "step at a time and check_step off only when you can see it's genuinely done.";
+    "step at a time and check_step off only when you can see it's genuinely done." +
+    "When planning time-bound work or before agreeing to a commitment, check the " +
+    "user's real calendar with list_events or find_free_time first. Fit work into " +
+    "the hours that actually exist, and warn them plainly when something conflicts " +
+    "or a new commitment would jeopardize a deadline — name the specific clash. ";
 
 // Fix 4: the app is served same-origin (express.static below), so cross-origin
 // requests are not needed for normal use. Default to no cross-origin access;

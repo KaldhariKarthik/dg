@@ -23,7 +23,7 @@ export class LiveSession {
     private closed = false;
     private tools: LiveToolRunner;
 
-    constructor(private clientWs: WSSocket, private userId: string, private cfg: LiveSessionConfig) {
+    constructor(private clientWs: WSSocket, private userId: string, private cfg: LiveSessionConfig, private timeZone: string = "UTC") {
         this.ai = new GoogleGenAI({ apiKey: cfg.apiKey });
         this.tools = new LiveToolRunner(userId, cfg.deps, (event, data) =>
             this.toClient({ type: "tool_event", event, data })
@@ -74,7 +74,20 @@ export class LiveSession {
             return `- "${p.goal}" (id: ${p.id}, ${done}/${p.steps.length} done)`;
         }).join("\n") || "(none yet)";
         const prefs = Object.entries(mem.preferences).map(([k, v]) => `${k}: ${v}`).join("; ") || "none";
+
+        const now = new Date();
+        const nowLocal = new Intl.DateTimeFormat("en-US", {
+            timeZone: this.timeZone,
+            weekday: "long", year: "numeric", month: "long", day: "numeric",
+            hour: "numeric", minute: "2-digit", timeZoneName: "short",
+        }).format(now);
+        const timeContext =
+            `\n\nThe current date and time is ${nowLocal} (${this.timeZone}); ISO ${now.toISOString()}. ` +
+            `Treat this as "now" when interpreting "today", "tomorrow", "this afternoon", "next week", etc., ` +
+            `and always pass RFC3339 timestamps with the correct offset to the calendar tools.`;
+
         return (
+            timeContext +
             "\n\nWhat you already know about this user (use naturally, don't recite):\n" +
             `Plans:\n${planLines}\n` +
             `Preferences: ${prefs}\n` +

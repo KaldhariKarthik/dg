@@ -110,6 +110,30 @@ export const TOOL_DECLARATIONS: FunctionDeclaration[] = [
         },
     },
     { name: "create_event", description: "Create the calendar event you previously drafted with propose_event. ONLY after the user confirms. Takes no arguments." },
+    {
+        name: "list_events",
+        description: "List the user's calendar events in a time window so you can reason about their real schedule (conflicts, what's coming up, whether a plan fits). Times are RFC3339 with offset.",
+        parameters: {
+            type: Type.OBJECT,
+            properties: {
+                timeMin: { type: Type.STRING, description: "Start of window, RFC3339 with offset." },
+                timeMax: { type: Type.STRING, description: "End of window, RFC3339 with offset." },
+            },
+            required: ["timeMin", "timeMax"],
+        },
+    },
+    {
+        name: "find_free_time",
+        description: "Get the user's BUSY blocks in a window so you can find the open hours that actually exist before scheduling work or committing them to something. Times are RFC3339 with offset.",
+        parameters: {
+            type: Type.OBJECT,
+            properties: {
+                timeMin: { type: Type.STRING },
+                timeMax: { type: Type.STRING },
+            },
+            required: ["timeMin", "timeMax"],
+        },
+    },
 ];
 
 type Emit = (event: string, data?: unknown) => void;
@@ -131,6 +155,8 @@ export class LiveToolRunner {
             case "send_email": return this.sendEmail();
             case "propose_event": return this.proposeEvent(args);
             case "create_event": return this.createEvent();
+            case "list_events": return this.listEvents(args);
+            case "find_free_time": return this.findFreeTime(args);
             default: return { error: `unknown tool: ${name}` };
         }
     }
@@ -246,6 +272,26 @@ export class LiveToolRunner {
             this.emit("event_created", { summary: ev.summary, id: r.id, link: r.htmlLink ?? null });
             return { created: true, summary: ev.summary, id: r.id, link: r.htmlLink ?? null };
         } catch (e) { return { error: this.adapterMsg(e, "create the event") }; }
+    }
+
+    private async listEvents(args: Record<string, any>) {
+        const timeMin = String(args.timeMin ?? "");
+        const timeMax = String(args.timeMax ?? "");
+        if (!timeMin || !timeMax) return { error: "timeMin and timeMax (RFC3339) required" };
+        try {
+            const events = await this.deps.calendarFactory(this.userId).listEvents(timeMin, timeMax);
+            return { events, count: events.length };
+        } catch (e) { return { error: this.adapterMsg(e, "read your calendar") }; }
+    }
+
+    private async findFreeTime(args: Record<string, any>) {
+        const timeMin = String(args.timeMin ?? "");
+        const timeMax = String(args.timeMax ?? "");
+        if (!timeMin || !timeMax) return { error: "timeMin and timeMax (RFC3339) required" };
+        try {
+            const busy = await this.deps.calendarFactory(this.userId).freeBusy(timeMin, timeMax);
+            return { window: { timeMin, timeMax }, busy, note: "These are BUSY blocks; the gaps between them (within the window) are free." };
+        } catch (e) { return { error: this.adapterMsg(e, "check your free time") }; }
     }
 
     private emails(v: any): string[] {

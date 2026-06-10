@@ -64,6 +64,36 @@ class GoogleCalendarAdapter {
             htmlLink: res.data.htmlLink ?? undefined,
         };
     }
+    async freeBusy(timeMin, timeMax) {
+        const authClient = await this.auth.clientFor(this.sessionId);
+        const calendar = googleapis_1.google.calendar({ version: "v3", auth: authClient });
+        const res = await calendar.freebusy.query({
+            requestBody: { timeMin, timeMax, items: [{ id: "primary" }] },
+        });
+        const busy = res.data.calendars?.primary?.busy ?? [];
+        return busy
+            .filter((b) => b.start && b.end)
+            .map((b) => ({ start: b.start, end: b.end }));
+    }
+    async listEvents(timeMin, timeMax, maxResults = 25) {
+        const authClient = await this.auth.clientFor(this.sessionId);
+        const calendar = googleapis_1.google.calendar({ version: "v3", auth: authClient });
+        const res = await calendar.events.list({
+            calendarId: "primary",
+            timeMin,
+            timeMax,
+            singleEvents: true, // required so orderBy:startTime is valid + recurrences expand
+            orderBy: "startTime",
+            maxResults,
+        });
+        return (res.data.items ?? []).map((e) => ({
+            id: e.id ?? "",
+            summary: e.summary ?? "(no title)",
+            start: e.start?.dateTime ?? e.start?.date ?? null,
+            end: e.end?.dateTime ?? e.end?.date ?? null,
+            ...(e.location ? { location: e.location } : {}),
+        }));
+    }
 }
 exports.GoogleCalendarAdapter = GoogleCalendarAdapter;
 //# sourceMappingURL=calendar.js.map

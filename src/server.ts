@@ -64,6 +64,8 @@ import { buildStores } from "./store/factory";
 import { Plan, ProposedPlan, normalizePlan } from "./store/planStore";
 import { rateLimitPerUser } from "./middleware/rateLimit";
 import { withTimeout } from "./util/withTimeout";
+import { createServer } from "http";
+import { attachLiveServer } from "./live/liveServer";
 
 // --- config -----------------------------------------------------------------
 const PORT = process.env.PORT ? Number(process.env.PORT) : 8080;
@@ -72,6 +74,22 @@ const apiKey = (process.env.GEMINI_API_KEY ?? process.env.API_KEY ?? "").trim();
 const VISION_MODEL_FAST = "gemini-3.1-flash-lite";
 const VISION_MODEL_DEEP = "gemini-3.5-flash";
 const VISION_TIMEOUT_MS = 25_000;
+const LIVE_MODEL = (process.env.LIVE_MODEL ?? "gemini-3.1-flash-live-preview").trim();
+// Warm female voice. Swap via LIVE_VOICE; nice alts: Leda, Kore, Sulafat, Callirrhoe, Achernar.
+const LIVE_VOICE = (process.env.LIVE_VOICE ?? "Aoede").trim();
+const LIVE_SYSTEM =
+    "You are DaVinci — a calm, warm, concise personal assistant speaking out loud " +
+    "and, when the camera is on, seeing what the user sees. Keep spoken replies " +
+    "short and natural, like a person beside them. Never mention that you are an " +
+    "AI, or talk about cameras, frames, audio, or tools.\n\n" +
+    "You can act using tools: read and update the user's plans, check steps off, " +
+    "recall and remember things about them, and draft/send email and calendar " +
+    "events. CONFIRMATION IS MANDATORY for anything that touches the outside world: " +
+    "for email, always compose_email first, read the draft aloud, and ask the user " +
+    "to confirm; only call send_email after they clearly agree. For calendar, " +
+    "always propose_event first and confirm before create_event. Never send or " +
+    "create without a spoken yes. If they're working with their hands, guide one " +
+    "step at a time and check_step off only when you can see it's genuinely done.";
 
 // Fix 4: the app is served same-origin (express.static below), so cross-origin
 // requests are not needed for normal use. Default to no cross-origin access;
@@ -708,6 +726,17 @@ function normalize(o: any) {
 }
 
 // --- start ------------------------------------------------------------------
-app.listen(PORT, () =>
-    console.log(`DaVinci server up on http://localhost:${PORT} [store: ${stores.backend}]`)
+const httpServer = createServer(app);
+attachLiveServer(httpServer, sessions, {
+    apiKey,
+    model: LIVE_MODEL,
+    voice: LIVE_VOICE,
+    systemInstruction: LIVE_SYSTEM,
+    deps: { plans, memory: memoryStore, gmailFactory, calendarFactory },
+});
+httpServer.listen(PORT, () =>
+    console.log(
+        `DaVinci server up on http://localhost:${PORT} ` +
+        `[store: ${stores.backend}] [live: ${LIVE_MODEL} / ${LIVE_VOICE}]`
+    )
 );

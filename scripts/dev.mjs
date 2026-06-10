@@ -10,16 +10,16 @@ import { context } from "esbuild";
 import { spawn } from "node:child_process";
 
 const ctx = await context({
-    entryPoints: ["client/vision-client.ts"],
+    entryPoints: ["client/vision-client.ts", "client/live-client.ts"],
     bundle: true,
     format: "iife",
-    outfile: "public/vision-client.js",
+    outdir: "public",
     target: ["es2020"],
     sourcemap: true,
     logLevel: "info",
 });
 await ctx.watch();
-console.log("[client] watching client/vision-client.ts → public/vision-client.js");
+console.log("[client] watching vision-client.ts + live-client.ts → public/*.js");
 
 const server = spawn("npx", ["tsx", "watch", "src/server.ts"], {
     stdio: "inherit",

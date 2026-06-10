@@ -7,7 +7,7 @@
         "build": "tsc && npm run build:client",
         "build:client": "npm run typecheck:client && npm run bundle:client",
         "typecheck:client": "tsc -p client/tsconfig.json",
-        "bundle:client": "esbuild client/vision-client.ts --bundle --format=iife --outfile=public/vision-client.js --target=es2020 --sourcemap",
+        "bundle:client": "esbuild client/vision-client.ts client/live-client.ts --bundle --format=iife --outdir=public --target=es2020 --sourcemap",
         "start": "node dist/server.js"
     },
     "dependencies": {
@@ -16,12 +16,14 @@
         "dotenv": "^16.6.1",
         "express": "^4.18.2",
         "firebase-admin": "^13.10.0",
-        "googleapis": "^144.0.0"
+        "googleapis": "^144.0.0",
+        "ws": "^8.21.0"
     },
     "devDependencies": {
         "@types/cors": "^2.8.19",
         "@types/express": "^5.0.6",
         "@types/node": "^25.9.2",
+        "@types/ws": "^8.5.13",
         "esbuild": "^0.28.0",
         "tsx": "^4.22.4",
         "typescript": "^6.0.3"

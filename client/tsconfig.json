@@ -15,6 +15,7 @@
         "forceConsistentCasingInFileNames": true
     },
     "include": [
-        "vision-client.ts"
+        "vision-client.ts",
+        "live-client.ts"
     ]
 }

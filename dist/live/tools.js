@@ -127,6 +127,17 @@ exports.TOOL_DECLARATIONS = [
             required: ["timeMin", "timeMax"],
         },
     },
+    {
+        name: "search_documents",
+        description: "Search the user's OWN documents and notes (their Google Drive) for something they wrote, saved, or decided — e.g. 'what did I decide about the budget', 'find the contract from March', 'the notes from that meeting'. Returns the most relevant passages with the document names. Use this whenever the user refers to their own files, notes, or past written decisions rather than general knowledge.",
+        parameters: {
+            type: genai_1.Type.OBJECT,
+            properties: {
+                query: { type: genai_1.Type.STRING, description: "What to look for, in natural language." },
+            },
+            required: ["query"],
+        },
+    },
 ];
 class LiveToolRunner {
     userId;
@@ -152,6 +163,7 @@ class LiveToolRunner {
             case "create_event": return this.createEvent();
             case "list_events": return this.listEvents(args);
             case "find_free_time": return this.findFreeTime(args);
+            case "search_documents": return this.searchDocuments(args);
             default: return { error: `unknown tool: ${name}` };
         }
     }
@@ -301,6 +313,31 @@ class LiveToolRunner {
         }
         catch (e) {
             return { error: this.adapterMsg(e, "check your free time") };
+        }
+    }
+    async searchDocuments(args) {
+        const query = String(args.query ?? "").trim();
+        if (!query)
+            return { error: "a search query is required" };
+        try {
+            const hits = await this.deps.recall.search(this.userId, query, 5);
+            if (!hits.length) {
+                return {
+                    hits: [],
+                    note: "Nothing matched — either no document covers this, or the user hasn't synced their Drive yet. If unsure, tell them they can sync their documents from the Notebook screen.",
+                };
+            }
+            return {
+                hits: hits.map((h) => ({
+                    document: h.docName,
+                    excerpt: h.text.length > 400 ? h.text.slice(0, 400) + "…" : h.text,
+                    relevance: Math.round(h.score * 100) / 100,
+                })),
+                note: "Answer from these excerpts in your own words, and name the document(s) you drew from.",
+            };
+        }
+        catch (e) {
+            return { error: this.adapterMsg(e, "search your documents") };
         }
     }
     emails(v) {

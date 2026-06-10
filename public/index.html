@@ -797,7 +797,29 @@
                 <p class="u-data text-muted text-sm">Checking connections…</p>
             </div>
         </div>
-
+        <!-- documents / recall (driven by /api/recall) -->
+        <div class="card p-5 mb-5">
+            <div class="flex items-center justify-between mb-4">
+                <span class="u-label">Your documents</span>
+                <span class="material-symbols-outlined text-muted" style="font-size:16px;">folder_open</span>
+            </div>
+            <p class="text-paper-dim text-sm leading-relaxed mb-4">
+                Sync your Google Drive and DaVinci can find what you wrote when you ask — "what did I
+                decide about…", "find the…". Searched live, never sold.
+            </p>
+            <div class="flex items-center justify-between gap-3">
+                <div class="min-w-0">
+                    <p id="recall-count" class="u-data text-paper text-sm">—</p>
+                    <p id="recall-status" class="u-label mt-1" style="font-size:9px;">NOT SYNCED YET</p>
+                </div>
+                <button id="recall-sync-btn"
+                    class="px-4 py-2.5 rounded-xl u-label active:scale-95 transition-transform flex items-center gap-2 shrink-0"
+                    style="background:rgba(216,90,59,0.12);border:1px solid rgba(216,90,59,0.3);color:var(--sanguine);font-size:10px;">
+                    <span class="material-symbols-outlined" style="font-size:16px;">sync</span>
+                    SYNC DRIVE
+                </button>
+            </div>
+        </div>
         <!-- learned memory (driven by /api/memory) -->
         <div class="card p-5 mb-5">
             <div class="flex items-center justify-between mb-4">
@@ -918,7 +940,7 @@
             }
             window.scrollTo(0, 0);
             if (name === 'home') renderHome();
-            if (name === 'memory') { fetchMemory(); renderSources(); }
+            if (name === 'memory') { fetchMemory(); renderSources(); renderRecallStatus(); }
             if (name === 'planner') renderPlanner();
         }
         document.querySelectorAll('.navlink').forEach(n =>
@@ -1206,6 +1228,50 @@
                 sourceRow('calendar_today', 'Calendar', 'Adds and edits events', !!c.calendar) +
                 sourceRow('account_circle', 'Google account', 'Your identity', !!c.google);
         }
+
+        // ===================== Documents / Recall =====================
+        async function renderRecallStatus() {
+            try {
+                const res = await fetch('/api/recall/status');
+                if (!res.ok) return;
+                const { docs, chunks } = await res.json();
+                const countEl = document.getElementById('recall-count');
+                const statusEl = document.getElementById('recall-status');
+                if (countEl) countEl.textContent = docs === 0
+                    ? 'No documents indexed'
+                    : `${docs} document${docs > 1 ? 's' : ''} indexed`;
+                if (statusEl) statusEl.textContent = docs === 0
+                    ? 'NOT SYNCED YET'
+                    : `${chunks} PASSAGE${chunks > 1 ? 'S' : ''} SEARCHABLE`;
+            } catch (e) { }
+        }
+        async function syncDrive() {
+            const btn = document.getElementById('recall-sync-btn');
+            const statusEl = document.getElementById('recall-status');
+            if (!btn) return;
+            const original = btn.innerHTML;
+            btn.disabled = true;
+            btn.style.opacity = '0.6';
+            btn.innerHTML = '<span class="material-symbols-outlined" style="font-size:16px;">hourglass_top</span> SYNCING…';
+            if (statusEl) statusEl.textContent = 'READING YOUR DRIVE…';
+            try {
+                const res = await fetch('/api/recall/sync', { method: 'POST' });
+                const data = await res.json();
+                if (data.error) {
+                    if (statusEl) statusEl.textContent = String(data.error).toUpperCase();
+                } else {
+                    await renderRecallStatus(); // settles to "<n> documents indexed"
+                }
+            } catch (e) {
+                if (statusEl) statusEl.textContent = 'SYNC FAILED — TRY AGAIN';
+            } finally {
+                btn.disabled = false;
+                btn.style.opacity = '';
+                btn.innerHTML = original;
+            }
+        }
+        const recallSyncBtn = document.getElementById('recall-sync-btn');
+        if (recallSyncBtn) recallSyncBtn.addEventListener('click', syncDrive);
 
         // ===================== Memory =====================
         async function fetchMemory() {

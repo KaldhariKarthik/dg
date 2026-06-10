@@ -15,6 +15,9 @@
  *   POST /api/vision      (auth)    -> { image, tier?, ... } -> v1.0 envelope
  *   POST /api/orchestrate (auth)    -> { observation } -> directive (+ step_checked)
  *   POST /api/vision/session/end (auth) -> { planId, summaries } -> { recap }
+ *   POST /api/recall/sync (auth)    -> index the user's Drive
+ *   GET  /api/recall/search (auth)  -> { q } -> ranked hits
+ *   GET  /api/recall/status (auth)  -> { docs, chunks }
  *   static public/
  *
  * Stability fixes folded in here:
@@ -66,6 +69,10 @@ import { rateLimitPerUser } from "./middleware/rateLimit";
 import { withTimeout } from "./util/withTimeout";
 import { createServer } from "http";
 import { attachLiveServer } from "./live/liveServer";
+import { GoogleDriveAdapter } from "./adapters/drive";
+import { Embedder } from "./recall/embeddings";
+import { RecallService } from "./recall/recall";
+import { mountRecallRoutes } from "./recall/routes";
 
 // --- config -----------------------------------------------------------------
 const PORT = process.env.PORT ? Number(process.env.PORT) : 8080;
@@ -93,7 +100,10 @@ const LIVE_SYSTEM =
     "When planning time-bound work or before agreeing to a commitment, check the " +
     "user's real calendar with list_events or find_free_time first. Fit work into " +
     "the hours that actually exist, and warn them plainly when something conflicts " +
-    "or a new commitment would jeopardize a deadline — name the specific clash. ";
+    "or a new commitment would jeopardize a deadline — name the specific clash. " +
+    "When the user asks about something they wrote, saved, or decided, or refers to " +
+    "a note, doc, or file of theirs, call search_documents to find it before " +
+    "answering, and name the document you drew from.";
 
 // Fix 4: the app is served same-origin (express.static below), so cross-origin
 // requests are not needed for normal use. Default to no cross-origin access;
@@ -135,6 +145,12 @@ console.log("[auth] Google OAuth configured.");
 const gmailFactory = (userId: string) => new GoogleGmailAdapter(googleApiAuth, userId);
 const calendarFactory = (userId: string) => new GoogleCalendarAdapter(googleApiAuth, userId);
 
+// Recall: read-only Drive adapter + embeddings + semantic search over the
+// user's documents. driveFactory mirrors the gmail/calendar factory shape.
+const driveFactory = (userId: string) => new GoogleDriveAdapter(googleApiAuth, userId);
+const embedder = new Embedder(apiKey);
+const recall = new RecallService(stores.documents, embedder, driveFactory);
+
 const registry = new AgentRegistry();
 registry.register(new ResearcherAgent(gemini));
 registry.register(new PlannerAgent(gemini));
@@ -174,10 +190,15 @@ app.use(
 app.use(makeAttachUser(sessions)); // populates req.userId from the session cookie
 app.use(express.static("public"));
 
+// Recall REST surface (sync / search / status). Mounted here, where `app`,
+// `requireAuth`, and `recall` all exist. getUserId mirrors how the other
+// protected routes read identity (req.userId, set by attachUser).
+mountRecallRoutes(app, requireAuth, recall, (req) => (req as any).userId ?? null);
+
 /* ============================ AUTH ROUTES ============================== */
 
 // GET /api/auth/google — begin login. Sets an anti-CSRF state cookie and
-// redirects to Google's consent screen (identity + Gmail + Calendar).
+// redirects to Google's consent screen (identity + Gmail + Calendar + Drive).
 app.get("/api/auth/google", (_req: Request, res: Response) => {
     const state = randomBytes(16).toString("hex");
     setOAuthStateCookie(res, state);
@@ -243,6 +264,7 @@ app.get("/api/me", requireAuth, async (req: Request, res: Response) => {
             google: Boolean(user.google?.refresh_token),
             gmail: scopes.includes("https://www.googleapis.com/auth/gmail.send"),
             calendar: scopes.includes("https://www.googleapis.com/auth/calendar"),
+            drive: scopes.includes("https://www.googleapis.com/auth/drive.readonly"),
         },
     });
 });
@@ -736,7 +758,7 @@ attachLiveServer(httpServer, sessions, {
     model: LIVE_MODEL,
     voice: LIVE_VOICE,
     systemInstruction: LIVE_SYSTEM,
-    deps: { plans, memory: memoryStore, gmailFactory, calendarFactory },
+    deps: { plans, memory: memoryStore, gmailFactory, calendarFactory, recall },
 });
 httpServer.listen(PORT, () =>
     console.log(

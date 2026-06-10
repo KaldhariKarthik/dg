@@ -16,6 +16,9 @@
  *   POST /api/vision      (auth)    -> { image, tier?, ... } -> v1.0 envelope
  *   POST /api/orchestrate (auth)    -> { observation } -> directive (+ step_checked)
  *   POST /api/vision/session/end (auth) -> { planId, summaries } -> { recap }
+ *   POST /api/recall/sync (auth)    -> index the user's Drive
+ *   GET  /api/recall/search (auth)  -> { q } -> ranked hits
+ *   GET  /api/recall/status (auth)  -> { docs, chunks }
  *   static public/
  *
  * Stability fixes folded in here:
@@ -60,6 +63,10 @@ const rateLimit_1 = require("./middleware/rateLimit");
 const withTimeout_1 = require("./util/withTimeout");
 const http_1 = require("http");
 const liveServer_1 = require("./live/liveServer");
+const drive_1 = require("./adapters/drive");
+const embeddings_1 = require("./recall/embeddings");
+const recall_1 = require("./recall/recall");
+const routes_1 = require("./recall/routes");
 // --- config -----------------------------------------------------------------
 const PORT = process.env.PORT ? Number(process.env.PORT) : 8080;
 const apiKey = (process.env.GEMINI_API_KEY ?? process.env.API_KEY ?? "").trim();
@@ -84,7 +91,10 @@ const LIVE_SYSTEM = "You are DaVinci — a calm, warm, concise personal assistan
     "When planning time-bound work or before agreeing to a commitment, check the " +
     "user's real calendar with list_events or find_free_time first. Fit work into " +
     "the hours that actually exist, and warn them plainly when something conflicts " +
-    "or a new commitment would jeopardize a deadline — name the specific clash. ";
+    "or a new commitment would jeopardize a deadline — name the specific clash. " +
+    "When the user asks about something they wrote, saved, or decided, or refers to " +
+    "a note, doc, or file of theirs, call search_documents to find it before " +
+    "answering, and name the document you drew from.";
 // Fix 4: the app is served same-origin (express.static below), so cross-origin
 // requests are not needed for normal use. Default to no cross-origin access;
 // set APP_ORIGIN to explicitly allow one origin (e.g. a separate front-end host).
@@ -116,6 +126,11 @@ console.log("[auth] Google OAuth configured.");
 // Per-user adapter factories handed to the executor.
 const gmailFactory = (userId) => new gmail_1.GoogleGmailAdapter(googleApiAuth, userId);
 const calendarFactory = (userId) => new calendar_1.GoogleCalendarAdapter(googleApiAuth, userId);
+// Recall: read-only Drive adapter + embeddings + semantic search over the
+// user's documents. driveFactory mirrors the gmail/calendar factory shape.
+const driveFactory = (userId) => new drive_1.GoogleDriveAdapter(googleApiAuth, userId);
+const embedder = new embeddings_1.Embedder(apiKey);
+const recall = new recall_1.RecallService(stores.documents, embedder, driveFactory);
 const registry = new registry_1.AgentRegistry();
 registry.register(new researcher_1.ResearcherAgent(gemini));
 registry.register(new planner_1.PlannerAgent(gemini));
@@ -146,9 +161,13 @@ app.use((0, cors_1.default)({
 }));
 app.use((0, middleware_1.makeAttachUser)(sessions)); // populates req.userId from the session cookie
 app.use(express_1.default.static("public"));
+// Recall REST surface (sync / search / status). Mounted here, where `app`,
+// `requireAuth`, and `recall` all exist. getUserId mirrors how the other
+// protected routes read identity (req.userId, set by attachUser).
+(0, routes_1.mountRecallRoutes)(app, middleware_1.requireAuth, recall, (req) => req.userId ?? null);
 /* ============================ AUTH ROUTES ============================== */
 // GET /api/auth/google — begin login. Sets an anti-CSRF state cookie and
-// redirects to Google's consent screen (identity + Gmail + Calendar).
+// redirects to Google's consent screen (identity + Gmail + Calendar + Drive).
 app.get("/api/auth/google", (_req, res) => {
     const state = (0, crypto_1.randomBytes)(16).toString("hex");
     (0, middleware_1.setOAuthStateCookie)(res, state);
@@ -213,6 +232,7 @@ app.get("/api/me", middleware_1.requireAuth, async (req, res) => {
             google: Boolean(user.google?.refresh_token),
             gmail: scopes.includes("https://www.googleapis.com/auth/gmail.send"),
             calendar: scopes.includes("https://www.googleapis.com/auth/calendar"),
+            drive: scopes.includes("https://www.googleapis.com/auth/drive.readonly"),
         },
     });
 });
@@ -635,7 +655,7 @@ const httpServer = (0, http_1.createServer)(app);
     model: LIVE_MODEL,
     voice: LIVE_VOICE,
     systemInstruction: LIVE_SYSTEM,
-    deps: { plans, memory: memoryStore, gmailFactory, calendarFactory },
+    deps: { plans, memory: memoryStore, gmailFactory, calendarFactory, recall },
 });
 httpServer.listen(PORT, () => console.log(`DaVinci server up on http://localhost:${PORT} ` +
     `[store: ${stores.backend}] [live: ${LIVE_MODEL} / ${LIVE_VOICE}]`));

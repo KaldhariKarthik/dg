@@ -94,7 +94,19 @@ export interface CalendarAdapter {
 }
 
 
+export interface DriveFileMeta {
+    id: string;
+    name: string;
+    mimeType: string;
+    modifiedTime: string; // RFC3339
+}
 
+export interface DriveAdapter {
+    /** Text-bearing files (Docs, Sheets, Slides, text/markdown), newest first. */
+    listDocs(maxResults?: number): Promise<DriveFileMeta[]>;
+    /** A file's text content (Workspace docs are exported, plain files downloaded). */
+    readDoc(fileId: string, mimeType: string): Promise<string>;
+}
 /* ----------------------------------------------------------------------------
  *  Future adapters (Spotify, etc.) slot in here with the same shape.
  * ------------------------------------------------------------------------- */

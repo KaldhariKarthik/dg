@@ -128,7 +128,9 @@ export class LlmRouter implements Router {
             "SINGLE best agent for the user's message, or finish.\n\n" +
             "Agents:\n" +
             "- researcher: factual questions, explanations, lookups (capitals, how " +
-            "things work, distances, dates, definitions).\n" +
+            "things work, distances, dates, definitions), AND questions about the " +
+            "user's OWN documents, notes, or files ('what did I decide in that note', " +
+            "'find the contract with the March date') — it can search the user's files.\n" +
             "- planner: ONLY when the user wants to create, change, check, or " +
             "continue a goal/plan. Building plans, marking progress, asking " +
             "'what's my plan', or a vague follow-up DIRECTLY after planning talk " +

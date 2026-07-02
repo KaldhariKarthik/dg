@@ -186,7 +186,13 @@ console.log(`[recall] embeddings via ${openaiKey ? "OpenAI" : "Gemini"}`);
 const recall = new RecallService(stores.documents, embedder, driveFactory);
 const proactive = new ProactiveService(stores.notifications, plans, memoryStore, calendarFactory, llm);
 const registry = new AgentRegistry();
-registry.register(new ResearcherAgent(llm));
+// The researcher can ground answers in the user's own documents via Recall
+// (same corpus the voice search_documents tool uses), so "what did I decide in
+// that note?" works in text chat too. Falls back to general knowledge when the
+// user has nothing indexed.
+registry.register(
+    new ResearcherAgent(llm, (userId, query, topK) => recall.search(userId, query, topK))
+);
 registry.register(new PlannerAgent(llm));
 registry.register(new ConversationalAgent(llm));
 registry.register(new VisionAgent(llm));

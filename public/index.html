@@ -286,6 +286,7 @@ input,textarea{font-family:inherit}
     <button class="rb" id="btnBrief" style="position:relative"><span>❖</span><span class="tip">Briefing &amp; alerts</span><span id="briefBadge" style="display:none;position:absolute;top:4px;right:6px;min-width:15px;height:15px;padding:0 3px;border-radius:99px;background:var(--gold);color:var(--navy);font-size:9px;font-weight:800;line-height:15px;text-align:center"></span></button>
     <button class="rb" id="btnReset"><span>↺</span><span class="tip">New session</span></button>
     <div class="spacer"></div>
+    <button class="rb" id="btnLogout" style="display:none"><span>⎋</span><span class="tip">Sign out</span></button>
     <button class="rb"><span>◐</span><span class="tip">DaVinci · one mind, many hands</span></button>
   </nav>
 
@@ -909,9 +910,20 @@ async function analyzeFrame(){
   if(s.summary)vision.summaries.push(s.summary);
 
   // Guided session: hand the observation to the orchestrator for a coaching
-  // directive (and server-side step check-off). Otherwise, just describe.
+  // directive (and server-side step check-off).
   if(vision.session.mode==="guided"){
     await runGuidedTurn(observation);
+    vision.analyzing=false;renderVision();
+    return;
+  }
+
+  // Describe mode. If the user actually ASKED something, run the reasoning stage
+  // (/api/orchestrate) so DaVinci ANSWERS the question — not just narrates the
+  // objects it sees. Perception (/api/vision) describes; the vision agent
+  // decides. Only when there's no question do we fall back to a plain scene
+  // read-out.
+  if(query){
+    await runDescribeTurn(observation,query);
     vision.analyzing=false;renderVision();
     return;
   }
@@ -924,6 +936,38 @@ async function analyzeFrame(){
     :`Looking now — ${summary} Nothing unusual.`;
   addAI(line,[{kind:"route",agent:"vision",reason:"live frame analyzed"}],s);
   speak(line);
+}
+
+/* Describe-mode reasoning turn: the user asked a question about what DaVinci can
+   see. POST the observation to /api/orchestrate with NO guided plan, so the
+   vision agent answers the question conversationally (one short spoken line).
+   This is the difference between "man 99%, hair 97%, ..." and an actual answer. */
+async function runDescribeTurn(observation,query){
+  let d=null;
+  try{
+    const r=await fetch("/api/orchestrate",{
+      method:"POST",headers:{"Content-Type":"application/json"},credentials:"include",
+      body:JSON.stringify({observation,session:{mode:"describe",planId:null}}),
+    });
+    if(!r.ok)throw new Error("orchestrate "+r.status);
+    d=await r.json();
+  }catch(e){
+    // Fall back to a plain scene summary so the user still gets something.
+    const s=observation.scene||{};
+    const line=`Looking now — ${(s.summary||"").toLowerCase()}`;
+    addAI(line,[{kind:"route",agent:"vision",reason:"live frame analyzed"}],s);
+    speak(line);
+    return;
+  }
+  vision.watchFor=d.watch_for||null;
+  // The agent answers in `guidance`. If it chose to stay silent (e.g. a pure
+  // "watch for X" acknowledgement with nothing to say), give a minimal fallback.
+  const answer=(d.guidance||"").trim()
+    || (d.watch_for?`Got it — I'll watch for ${d.watch_for} and let you know.`:"I had a look, but I'm not sure what you'd like to know — ask me about anything in view.");
+  // Answer only — the structured perception stays in the Vision panel, not
+  // dumped as an object list under the reply.
+  addAI(answer,[{kind:"route",agent:"vision",reason:"answered from live view"}],null);
+  speak(answer);
 }
 
 /* Guided coaching turn: POST the v1.0 observation to /api/orchestrate with the
@@ -952,7 +996,7 @@ async function runGuidedTurn(observation){
     if(stepText)addTraceLine(`✓ Checked off: ${stepText}`);
   }
   const guidance=d.guidance||"Keep going — I'm watching.";
-  addAI(guidance,[{kind:"route",agent:"vision",reason:"guided step"}],observation.scene);
+  addAI(guidance,[{kind:"route",agent:"vision",reason:"guided step"}],null);
   speak(guidance);
   if(d.done){
     const msg=d.done_message||"That's everything — nice work.";
@@ -1041,6 +1085,15 @@ function renderAttachments(){
   }).join("");
   wrap.querySelectorAll(".x").forEach(x=>x.onclick=()=>{const i=+x.dataset.i;if(attachments[i].url)URL.revokeObjectURL(attachments[i].url);attachments.splice(i,1);renderAttachments()});
 }
+/* Read a File into a base64 data URL (for POSTing uploaded images to /api/vision). */
+function fileToDataUrl(file){
+  return new Promise((resolve,reject)=>{
+    const r=new FileReader();
+    r.onload=()=>resolve(r.result);
+    r.onerror=()=>reject(new Error("couldn't read file"));
+    r.readAsDataURL(file);
+  });
+}
 function addFiles(fileList){
   for(const f of fileList){
     const a={name:f.name,type:f.type,size:f.size,file:f};
@@ -1049,9 +1102,9 @@ function addFiles(fileList){
   }
   renderAttachments();
 }
-/* HOOK: attachments are staged here. On send, a real backend would upload these
-   (images route to the vision pipeline, docs to a file/RAG path). Right now they
-   ride along as metadata so the flow is testable. */
+/* Attachments are staged here, then handled on send: images are POSTed to
+   /api/vision (analyzed and answered), and non-image files are acknowledged
+   honestly (document reading isn't wired yet). See send(). */
 
 /* main-composer voice input — REAL spoken conversation over Gemini Live.
    Streams mic audio to our /live WebSocket, plays DaVinci's voice back, and
@@ -1134,6 +1187,72 @@ async function send(text,kind){
   setStatus(true,"Routing…");addUser(text||(sentFiles.length?"(shared "+sentFiles.length+" file"+(sentFiles.length>1?"s":"")+")":""),kind,sentFiles);
   const trace=[];showWorking("routing…");
   let finalMsg="",scene=null;
+
+  // Image attachments are real input: route them through the vision pipeline
+  // (the only endpoint that accepts an image) rather than dropping them. The
+  // typed text rides along as the question about the picture.
+  const imgFile=sentFiles.find(a=>a.type&&a.type.startsWith("image/")&&a.file);
+  if(imgFile){
+    try{
+      const dataUrl=await fileToDataUrl(imgFile.file);
+      const res=await fetch("/api/vision",{
+        method:"POST",headers:{"Content-Type":"application/json"},credentials:"include",
+        body:JSON.stringify({
+          image:dataUrl,tier:"deep",
+          task_context:{task:text?"answer about image":"observe",mode:"upload"},
+          user_transcript:text||"",
+          media_meta:{source_type:"upload",resolution:"still",capture_device:"file"},
+        }),
+      });
+      if(res.status===401){hideWorking();addAI("You're not signed in. Open **/api/auth/google** to log in, then try again.",null,null);}
+      else if(!res.ok){hideWorking();addAI("Couldn't read that image — the server returned "+res.status+". Try again?",null,null);}
+      else{
+        const obs=await res.json();const s=obs.scene||{};
+        vision.lastObs=obs;
+        if(text){
+          // The user asked something about the image — reason and answer.
+          let answered=false;
+          try{
+            const orc=await fetch("/api/orchestrate",{
+              method:"POST",headers:{"Content-Type":"application/json"},credentials:"include",
+              body:JSON.stringify({observation:obs,session:{mode:"describe",planId:null}}),
+            });
+            if(orc.ok){
+              const d=await orc.json();
+              const answer=(d.guidance||"").trim();
+              if(answer){hideWorking();addAI(answer,[{kind:"route",agent:"vision",reason:"answered from image"}],null);speak(answer);answered=true;}
+            }
+          }catch(e){}
+          if(!answered){
+            hideWorking();
+            const line=`Looking at what you shared — ${(s.summary||"").toLowerCase()}`;
+            addAI(line,[{kind:"route",agent:"vision",reason:"uploaded image analyzed"}],s);
+          }
+        }else{
+          // No question — a plain scene read-out.
+          hideWorking();
+          const warn=(s.anomalies&&s.anomalies[0])||null;
+          const line=`Here's what I see — ${(s.summary||"").toLowerCase()}${warn?" Worth noting: "+warn.description.toLowerCase():""}`;
+          addAI(line,[{kind:"route",agent:"vision",reason:"uploaded image analyzed"}],s);
+        }
+      }
+    }catch(e){hideWorking();addAI("Couldn't process that image — "+(e.message||"read error")+".",null,null);}
+    // Any non-image files that came along can't be handled yet — say so plainly
+    // instead of pretending they were used.
+    const others=sentFiles.filter(a=>!(a.type&&a.type.startsWith("image/")));
+    if(others.length)addAI("I can see images right now, but I can't read "+others.map(a=>a.name).join(", ")+" yet — document understanding is coming. Paste the key text and I'll work with it.",null,null);
+    busy=false;$("send").disabled=false;document.querySelectorAll(".chip").forEach(c=>c.disabled=false);setStatus(false,"Ready");$("input").focus();
+    return;
+  }
+  // Non-image files with no image present: be honest rather than silently drop.
+  if(sentFiles.length&&!imgFile){
+    hideWorking();
+    addAI("I've noted "+sentFiles.map(a=>a.name).join(", ")+", but I can't read documents yet — that's on the way. For now, paste the important text and I'll help with it directly.",null,null);
+    if(text){/* fall through to normal text turn below with the typed message */}
+    else{busy=false;$("send").disabled=false;document.querySelectorAll(".chip").forEach(c=>c.disabled=false);setStatus(false,"Ready");$("input").focus();return;}
+    showWorking("routing…");
+  }
+
   try{
     for await(const ev of runTurn(text||"(file shared)",kind)){
       if(ev.type==="thinking"){setStatus(true,cap(AGENTS[ev.agent].label)+"…");setWorking(AGENTS[ev.agent].label.toLowerCase()+"…")}
@@ -1186,6 +1305,11 @@ $("btnWsM").onclick=()=>app.classList.add("ws-open");
 $("btnMenu").onclick=()=>$("rail").classList.toggle("open");
 $("backdrop").onclick=()=>{app.classList.remove("ws-open");$("rail").classList.remove("open")};
 $("btnBrief").onclick=openBriefing;
+$("btnLogout").onclick=async()=>{
+  if(!confirm("Sign out of DaVinci?"))return;
+  try{await fetch("/api/auth/logout",{method:"POST",credentials:"include"});}catch(e){}
+  window.location.href="/api/auth/google";
+};
 $("btnReset").onclick=()=>{ctx.state={plans:[],draft:null,claim:null};ctx.memory={preferences:{},past_patterns:[],long_term_facts:[]};stream.innerHTML="";panelTab="plans";renderPanel();greet()};
 
 function greet(){addAI("I'm DaVinci. Ask me something, set a goal, or share a scene — I'll route it to the right part of me and answer in one voice.",null,null)}
@@ -1208,6 +1332,7 @@ async function hydrate(){
     }
     // Signed in -> clear the one-shot guard and open the app normally.
     sessionStorage.removeItem("dv_auth_redirect");
+    try{const u=await me.json();if(u&&u.email){ctx.user=u;const lo=$("btnLogout");if(lo){lo.style.display="";const tip=lo.querySelector(".tip");if(tip)tip.textContent="Sign out ("+(u.displayName||u.email)+")";}}}catch(e){}
   }catch(e){}
   try{
     const [pr,mr]=await Promise.all([

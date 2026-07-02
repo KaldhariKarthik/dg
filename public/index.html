@@ -329,6 +329,8 @@ input,textarea{font-family:inherit}
   <div class="backdrop" id="backdrop"></div>
 </div>
 
+<!-- Gemini Live client (mic <-> /live WebSocket). Defines window.LiveClient. -->
+<script src="/live-client.js"></script>
 <script>
 /* ============================================================================
  *  DaVinci front end — vanilla, single file, no build step.
@@ -667,7 +669,9 @@ function wireVision(){
 }
 async function toggleCam(){
   if(vision.stream){vision.stream.getTracks().forEach(t=>t.stop());vision.stream=null;renderVision();return}
-  try{vision.stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:"environment"},audio:false});renderVision()}
+  try{vision.stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:"environment"},width:{ideal:1280},height:{ideal:720}},audio:false});renderVision();
+    // Ensure the visible <video> actually has the stream and is playing.
+    const v=$("camVideo");if(v){v.srcObject=vision.stream;try{await v.play()}catch(_){}}}
   catch(e){alert("Camera unavailable: "+e.message+"\n(Needs HTTPS or localhost + permission.)")}
 }
 /* HOOK 2 (LIVE): POST the captured frame (+ transcript) to /api/vision.
@@ -678,7 +682,16 @@ async function analyzeFrame(){
   if(!vision.stream||vision.analyzing)return;
   vision.analyzing=true;renderVision();
   const vid=$("camVideo");
-  const canvas=document.createElement("canvas");canvas.width=vid.videoWidth||640;canvas.height=vid.videoHeight||480;
+  // Guarantee the video is attached and has a painted frame before capture,
+  // otherwise the canvas grabs an all-black frame.
+  if(vid&&!vid.srcObject){vid.srcObject=vision.stream;try{await vid.play()}catch(_){}}
+  const ready=async()=>{for(let i=0;i<30;i++){if(vid&&vid.videoWidth>0&&vid.readyState>=2)return true;await new Promise(r=>setTimeout(r,50));}return false;};
+  if(!(await ready())){
+    vision.analyzing=false;renderVision();
+    addAI("Camera isn't producing a frame yet — give it a second after starting the feed, then try Analyze again.",null,null);
+    return;
+  }
+  const canvas=document.createElement("canvas");canvas.width=vid.videoWidth;canvas.height=vid.videoHeight;
   canvas.getContext("2d").drawImage(vid,0,0,canvas.width,canvas.height);
   const frameDataUrl=canvas.toDataURL("image/jpeg",0.7);
 
@@ -773,17 +786,72 @@ function addFiles(fileList){
    (images route to the vision pipeline, docs to a file/RAG path). Right now they
    ride along as metadata so the flow is testable. */
 
-/* main-composer voice input (Web Speech API — real) */
+/* main-composer voice input — REAL spoken conversation over Gemini Live.
+   Streams mic audio to our /live WebSocket, plays DaVinci's voice back, and
+   drops both sides' transcripts into the chat. Works in any browser (no Web
+   Speech dependency). Press to start talking, press again to end. */
+let liveOn=false, liveUserEl=null, liveAiEl=null;
+
+function liveBubble(who){ // minimal live-updating bubble appended to the chat
+  const d=document.createElement("div");
+  d.className = who==="user" ? "msg user" : "msg";
+  const b=document.createElement("div");
+  b.className = who==="user" ? "bubble" : "bubble ai";
+  b.textContent="…";
+  if(who==="user"){d.appendChild(b);} else {
+    const av=document.createElement("div");av.className="avatar";av.textContent="◐";
+    d.appendChild(av);d.appendChild(b);
+  }
+  stream.appendChild(d);scrollDown();
+  return b;
+}
+
 function toggleComposerVoice(){
-  const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
-  if(!SR){alert("Voice input isn't supported in this browser. Try Chrome or Edge.");return}
-  if(composerListening){composerRecog&&composerRecog.stop();return}
-  composerRecog=new SR();composerRecog.continuous=false;composerRecog.interimResults=true;composerRecog.lang="en-US";
-  const base=$("input").value?$("input").value+" ":"";
-  composerRecog.onresult=e=>{let txt="";for(let i=0;i<e.results.length;i++)txt+=e.results[i][0].transcript;$("input").value=base+txt};
-  composerRecog.onend=()=>{composerListening=false;$("btnVoice").classList.remove("listening");$("input").focus()};
-  composerRecog.onerror=()=>{composerListening=false;$("btnVoice").classList.remove("listening")};
-  composerRecog.start();composerListening=true;$("btnVoice").classList.add("listening");
+  if(!window.LiveClient){alert("Voice module didn't load. Hard-refresh the page (Ctrl+Shift+R).");return}
+
+  // Second press -> end the session.
+  if(liveOn){
+    LiveClient.stop();
+    liveOn=false;liveUserEl=null;liveAiEl=null;
+    $("btnVoice").classList.remove("listening");
+    setStatus(false,"Ready");
+    return;
+  }
+
+  // First press -> open a live session.
+  LiveClient.init({
+    callbacks:{
+      onState:(s)=>{
+        const btn=$("btnVoice");
+        btn.classList.toggle("listening", s==="listening"||s==="live"||s==="connecting");
+        const label={connecting:"Connecting…",live:"Listening…",listening:"Listening…",speaking:"DaVinci speaking…",idle:"Ready",error:"Voice error"}[s]||"";
+        setStatus(s!=="idle"&&s!=="error", label);
+      },
+      onUserTranscript:(text,final)=>{
+        if(!liveUserEl) liveUserEl=liveBubble("user");
+        liveUserEl.textContent=text;scrollDown();
+        if(final) liveUserEl=null;
+      },
+      onModelTranscript:(text,final)=>{
+        if(!liveAiEl) liveAiEl=liveBubble("ai");
+        liveAiEl.textContent=text;scrollDown();
+        if(final) liveAiEl=null;
+      },
+      onError:(msg)=>{
+        liveOn=false;$("btnVoice").classList.remove("listening");
+        setStatus(false,"Ready");
+        addAI("Voice session error — "+(msg||"unknown")+". Try again?",null,null);
+      },
+    },
+  });
+
+  liveOn=true;
+  $("btnVoice").classList.add("listening");
+  setStatus(true,"Connecting…");
+  LiveClient.start().catch(err=>{
+    liveOn=false;$("btnVoice").classList.remove("listening");setStatus(false,"Ready");
+    addAI("Couldn't start voice — "+((err&&err.message)||err||"mic/permission error")+".",null,null);
+  });
 }
 
 /* ============================ DRIVE A TURN ============================= */

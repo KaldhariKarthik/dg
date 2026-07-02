@@ -283,6 +283,7 @@ input,textarea{font-family:inherit}
     <div class="logo">◐</div>
     <button class="rb on" id="btnWs"><span>▥</span><span class="tip">Workspace</span></button>
     <button class="rb on" id="btnTrace"><span>◎</span><span class="tip">Show the machinery</span></button>
+    <button class="rb" id="btnBrief" style="position:relative"><span>❖</span><span class="tip">Briefing &amp; alerts</span><span id="briefBadge" style="display:none;position:absolute;top:4px;right:6px;min-width:15px;height:15px;padding:0 3px;border-radius:99px;background:var(--gold);color:var(--navy);font-size:9px;font-weight:800;line-height:15px;text-align:center"></span></button>
     <button class="rb" id="btnReset"><span>↺</span><span class="tip">New session</span></button>
     <div class="spacer"></div>
     <button class="rb"><span>◐</span><span class="tip">DaVinci · one mind, many hands</span></button>
@@ -364,6 +365,10 @@ const AGENTS={
 const ctx={state:{plans:[],draft:null,claim:null},memory:{preferences:{},past_patterns:[],long_term_facts:[]}};
 let busy=false, showTrace=true, wsView="work", panelTab="plans";
 const collapsedPlans=new Set();   // plan ids the user has collapsed in the panel
+/* Recall (Drive document search) state for the Docs tab. */
+const docs={status:{docs:0,chunks:0},syncing:false,query:"",searching:false,hits:null};
+/* Proactive attention feed (morning brief + Sentinel alerts). */
+const notif={list:[],loading:false};
 let attachments=[];               // files staged in the composer this turn
 let composerRecog=null, composerListening=false;  // main-composer voice input
 
@@ -382,12 +387,15 @@ const cap=s=>s?s[0].toUpperCase()+s.slice(1):s;
    the vision path (handled in send(), not here). credentials:'include' carries
    the Google session cookie. */
 async function* runTurn(text,kind){
-  // Scene turns are produced by analyzeFrame()/vision, not the chat brain.
+  // Scene turns are produced by analyzeFrame()/vision directly (which calls
+  // /api/vision and renders into the chat itself). runTurn should never be
+  // invoked with kind==="scene" anymore, but keep a safe no-op fallthrough that
+  // uses the real last observation instead of a hardcoded mock.
   if(kind==="scene"){
+    const s=vision.lastObs&&vision.lastObs.scene;
+    const msg=s?(s.summary||"I looked at the scene."):"Start the camera feed and analyze a scene to have me look.";
     yield{type:"route",agent:"vision",reason:"scene → vision"};
-    const res=await visionAgentMock();
-    yield{type:"agent",agent:"vision",res};
-    yield{type:"done",message:res.message,soFar:[{from:"vision",...res}]};
+    yield{type:"done",message:msg,soFar:s?[{from:"vision",message:msg,status:"ok",data:{isScene:true,scene:s}}]:[]};
     return;
   }
 
@@ -478,13 +486,48 @@ function showCameraOffer(offer){
   stream.appendChild(d);scrollDown();
   const y=d.querySelector("#offerYes");
   if(y)y.onclick=()=>{
-    // Jump to the Vision workspace so the user can start the live feed.
+    // Start a guided coaching session bound to this plan, then jump to Vision.
+    startGuidedSession(offer.planId);
     wsView="vision";
     $("wsSeg").querySelectorAll(".seg").forEach(x=>{const on=x.dataset.view==="vision";x.classList.toggle("on",on);x.classList.toggle("intel",on)});
     $("viewWork").style.display="none";$("viewVision").style.display="block";
     if(window.innerWidth<=900)app.classList.add("ws-open");
     renderVision();
   };
+}
+
+/* Begin a guided ("point-and-coach") session for a physical plan. From here,
+   Analyze routes frames through /api/orchestrate so DaVinci coaches step by step
+   and checks steps off as it sees them done. */
+function startGuidedSession(planId){
+  vision.session={mode:"guided",planId:planId||null};
+  vision.sessionId="vs-"+uid();
+  vision.watchFor=null;
+  vision.summaries=[];
+  const p=planId?ctx.state.plans.find(x=>x.id===planId):null;
+  addAI(p?`Guiding you through **${p.goal}**. Start the camera feed and I'll walk you through it, checking steps off as we go.`:"Guided session ready. Start the camera feed and I'll coach you through it.",null,null);
+}
+
+/* End the active guided session: POST the accrued scene summaries and get one
+   warm spoken-style recap back. Safe to call even outside a guided session. */
+async function endGuidedSession(){
+  const wasGuided=vision.session.mode==="guided";
+  const planId=vision.session.planId;
+  const summaries=vision.summaries.slice();
+  vision.session={mode:"describe",planId:null};vision.watchFor=null;vision.summaries=[];
+  if(!wasGuided)return;
+  try{
+    const r=await fetch("/api/vision/session/end",{
+      method:"POST",headers:{"Content-Type":"application/json"},credentials:"include",
+      body:JSON.stringify({planId,summaries}),
+    });
+    if(r.ok){
+      const{recap}=await r.json();
+      if(recap){addAI(recap,[{kind:"route",agent:"vision",reason:"session recap"}],null);speak(recap);}
+    }
+  }catch(e){console.warn("[session end] failed:",e.message);}
+  // Refresh plans so any steps auto-checked during coaching are reflected.
+  hydratePlans();
 }
 
 /* Pull the user's real long-term memory and repaint the Memory panel. */
@@ -500,8 +543,20 @@ async function refreshMemory(){
     if(wsView==="work"&&panelTab==="memory")renderPanel();
   }catch(e){}
 }
-function visionAgentMock(){return Promise.resolve({message:"I can see the workbench. The soldering iron on the left is **on** and unattended — worth a glance. Everything else looks settled.",status:"ok",data:{isScene:true,scene:SAMPLE_SCENE}})}
-const SAMPLE_SCENE={summary:"Cluttered electronics workbench, well-lit.",objects:[{label:"Soldering iron",state:"on, unattended",confidence:.91},{label:"Circuit board",state:"in progress",confidence:.84},{label:"Coffee mug",state:"half full",confidence:.77}],anomalies:[{type:"warning",description:"Soldering iron left on and unattended."}]};
+
+/* Pull the user's real plans and repaint the Plans panel. Used after guided
+   coaching checks steps off server-side, and after a plan delete. */
+async function hydratePlans(){
+  try{
+    const r=await fetch("/api/plans",{credentials:"include"});
+    if(!r.ok)return;const j=await r.json();
+    if(Array.isArray(j.plans))ctx.state.plans=j.plans;
+    if(wsView==="work")renderPanel();
+  }catch(e){}
+}
+/* (Removed visionAgentMock + SAMPLE_SCENE — vision is fully live now: the
+   Vision workspace calls /api/vision, and guided coaching calls /api/orchestrate
+   and /api/vision/session/end. No mock scene remains.) */
 
 /* ============================ RENDER =================================== */
 const $=id=>document.getElementById(id);
@@ -558,7 +613,7 @@ function applyTraceVisibility(){document.querySelectorAll(".msg").forEach(m=>{
 function renderTabs(){
   const plans=ctx.state.plans,draft=ctx.state.draft,mem=ctx.memory;
   const memN=Object.keys(mem.preferences).length+mem.past_patterns.length+mem.long_term_facts.length;
-  const tabs=[["plans","Plans",plans.length],["memory","Memory",memN],["drafts","Drafts",draft?1:0]];
+  const tabs=[["plans","Plans",plans.length],["memory","Memory",memN],["drafts","Drafts",draft?1:0],["docs","Docs",docs.status.docs||0]];
   $("wsTabs").innerHTML=tabs.map(([id,l,n])=>`<button class="wtab ${panelTab===id?'on':''}" data-tab="${id}">${l}${n?`<span class="badge">${n}</span>`:""}</button>`).join("");
   $("wsTabs").querySelectorAll(".wtab").forEach(b=>b.onclick=()=>{panelTab=b.dataset.tab;renderPanel()});
 }
@@ -569,14 +624,15 @@ function renderPanel(){
   const body=$("wsBody");
   if(panelTab==="plans")body.innerHTML=plans.length?plans.map(planCard).join(""):empty("◷","No plans yet","Say “plan a 2-week trip” and your goal shows up here, tracked step by step.");
   else if(panelTab==="memory")body.innerHTML=memN?memHTML(mem):empty("❖","Nothing remembered yet","Tell DaVinci something durable — “I'm vegetarian”, “I run every morning” — and it sticks here.");
-  else body.innerHTML=draft?draftHTML(draft):empty("➤","No draft waiting","Ask DaVinci to send an email or set a reminder. The draft lands here to confirm before anything happens.");
+  else if(panelTab==="drafts")body.innerHTML=draft?draftHTML(draft):empty("➤","No draft waiting","Ask DaVinci to send an email or set a reminder. The draft lands here to confirm before anything happens.");
+  else body.innerHTML=docsHTML();
   wirePanel();
 }
 function empty(g,t,b){return `<div class="empty"><div class="g">${g}</div><div class="t">${t}</div><div class="b">${b}</div></div>`}
 function planCard(p){const idx=ctx.state.plans.indexOf(p);
   const done=p.steps.filter(s=>s.done).length;const g={};p.steps.forEach((s,i)=>{(g[s.phase]=g[s.phase]||[]).push({s,i})});
   const collapsed=collapsedPlans.has(p.id);
-  return `<div class="pcard ${collapsed?'collapsed':''}"><div class="ph" data-collapse="${idx}"><div class="goal">${esc(p.goal)}</div><div style="display:flex;align-items:center;gap:7px"><span class="tf">${esc(p.timeframe)}</span><span class="chev">⌄</span></div></div>
+  return `<div class="pcard ${collapsed?'collapsed':''}"><div class="ph" data-collapse="${idx}"><div class="goal">${esc(p.goal)}</div><div style="display:flex;align-items:center;gap:7px"><span class="tf">${esc(p.timeframe)}</span><span class="pdel" data-del="${esc(p.id)}" title="Delete plan" style="cursor:pointer;color:var(--softer);font-size:15px;line-height:1">✕</span><span class="chev">⌄</span></div></div>
     <div class="track"><div class="fill" style="width:${done/p.steps.length*100}%"></div></div>
     <div class="pcount">${done} of ${p.steps.length} done</div>
     <div class="psteps">`+
@@ -592,10 +648,113 @@ function draftHTML(d){
   return `<div class="draft"><div class="k"><span>${d.kind==="email"?"✉ Email draft":"◷ Calendar event"}</span><span class="edit">live · editable</span></div>${inner}
     <button class="confirm" id="confirmBtn">${d.kind==="email"?"Send it":"Add it"}</button>
     <div class="dhint">Nothing leaves DaVinci until you confirm.</div></div>`}
+/* Docs (Recall) panel: index Drive, then semantic-search your own documents. */
+function docsHTML(){
+  const st=docs.status;
+  const head=`<div class="draft"><div class="k"><span>❖ Your documents</span><span class="edit">${st.docs?st.docs+" docs · "+st.chunks+" chunks":"not indexed"}</span></div>
+    <div class="dhint" style="margin:0 0 10px">DaVinci reads your Google Drive on-device and answers from it. Sync to index new or changed files.</div>
+    <button class="confirm" id="docsSync" ${docs.syncing?"disabled":""}>${docs.syncing?"◷ Indexing…":"⟳ Sync Drive"}</button>
+    <div class="dfield" style="margin-top:12px"><span class="l">Search your docs</span><input id="docsQ" placeholder="e.g. the contract with the March date" value="${esc(docs.query).replace(/"/g,'&quot;')}"/></div>
+    <button class="confirm" id="docsSearch" ${docs.searching?"disabled":""}>${docs.searching?"◷ Searching…":"Search"}</button></div>`;
+  let results="";
+  if(docs.hits!=null){
+    results=docs.hits.length
+      ?`<div style="margin-top:12px">`+docs.hits.map(h=>`<div class="obs" style="margin-top:8px"><div class="oh">❖ ${esc(h.docName||"Document")} · ${Math.round((h.score||0)*100)}%</div><div class="summary">${esc((h.text||"").slice(0,280))}${(h.text||"").length>280?"…":""}</div></div>`).join("")+`</div>`
+      :`<div class="empty" style="padding:24px 14px"><div class="g">❖</div><div class="t">No matches</div><div class="b">Try different words, or sync your Drive first.</div></div>`;
+  }
+  return head+results;
+}
+async function recallSync(){
+  docs.syncing=true;renderPanel();
+  try{
+    const r=await fetch("/api/recall/sync",{method:"POST",credentials:"include"});
+    const j=await r.json().catch(()=>({}));
+    if(j&&j.error)addAI("Couldn't sync Drive — "+j.error,null,null);
+    await recallStatus();
+  }catch(e){addAI("Drive sync failed — "+(e.message||"network error")+".",null,null);}
+  docs.syncing=false;renderPanel();
+}
+async function recallStatus(){
+  try{const r=await fetch("/api/recall/status",{credentials:"include"});if(r.ok)docs.status=await r.json();}catch(e){}
+}
+async function recallSearch(q){
+  docs.query=q;docs.searching=true;docs.hits=null;renderPanel();
+  try{
+    const r=await fetch("/api/recall/search?q="+encodeURIComponent(q),{credentials:"include"});
+    const j=await r.json();docs.hits=Array.isArray(j.hits)?j.hits:[];
+  }catch(e){docs.hits=[];addAI("Search failed — "+(e.message||"network error")+".",null,null);}
+  docs.searching=false;renderPanel();
+}
+
+/* ---------------- Proactive: briefing + alerts ---------------- */
+async function refreshNotifications(){
+  try{
+    const r=await fetch("/api/notifications",{credentials:"include"});
+    if(!r.ok)return;const j=await r.json();
+    notif.list=Array.isArray(j.notifications)?j.notifications:[];
+    updateBriefBadge();
+  }catch(e){}
+}
+function updateBriefBadge(){
+  const b=$("briefBadge");if(!b)return;
+  const n=notif.list.filter(x=>!x.read).length;
+  if(n>0){b.style.display="block";b.textContent=n>9?"9+":String(n)}else b.style.display="none";
+}
+/* Open the attention feed in the chat: render each notification, mark all read. */
+async function openBriefing(){
+  await refreshNotifications();
+  if(!notif.list.length){
+    addAI("Nothing needs your attention right now. Want me to pull together a fresh briefing? Tap **Refresh briefing** below.",null,null);
+    addBriefRefreshLine();
+    return;
+  }
+  for(const n of notif.list.slice(0,12)){
+    const icon=n.kind==="alert"?"▲":"❖";
+    addAI(`${icon} **${esc(n.title)}**\n\n${esc(n.body)}`,[{kind:"route",agent:n.kind==="alert"?"vision":"planner",reason:n.kind==="alert"?"sentinel alert":"morning brief"}],null);
+  }
+  addBriefRefreshLine();
+  // Mark everything read on the server and locally.
+  try{await fetch("/api/notifications/read",{method:"POST",headers:{"Content-Type":"application/json"},credentials:"include",body:JSON.stringify({all:true})});}catch(e){}
+  notif.list.forEach(n=>n.read=true);updateBriefBadge();
+}
+function addBriefRefreshLine(){
+  const d=document.createElement("div");d.className="msg";
+  d.innerHTML=`<div class="avatar">◐</div><div class="aiwrap"><div class="bubble ai"><span class="edgebar"></span><div class="vcontrols" style="margin-top:2px"><button class="vbtn intel" id="briefRun">⟳ Refresh briefing</button></div></div></div>`;
+  stream.appendChild(d);scrollDown();
+  const b=d.querySelector("#briefRun");
+  if(b)b.onclick=async()=>{
+    b.disabled=true;b.textContent="◷ Working…";
+    try{
+      await fetch("/api/proactive/run?job=brief",{method:"POST",credentials:"include"});
+      await fetch("/api/proactive/run?job=sentinel",{method:"POST",credentials:"include"});
+      await refreshNotifications();
+      addAI("Fresh briefing ready — reopening it now.",null,null);
+      // Show the newly generated items.
+      for(const n of notif.list.slice(0,12)){
+        const icon=n.kind==="alert"?"▲":"❖";
+        addAI(`${icon} **${esc(n.title)}**\n\n${esc(n.body)}`,null,null);
+      }
+      try{await fetch("/api/notifications/read",{method:"POST",headers:{"Content-Type":"application/json"},credentials:"include",body:JSON.stringify({all:true})});}catch(e){}
+      notif.list.forEach(n=>n.read=true);updateBriefBadge();
+    }catch(e){addAI("Couldn't refresh the briefing — "+(e.message||"network error")+".",null,null);}
+  };
+}
 function wirePanel(){
   $("wsBody").querySelectorAll("[data-collapse]").forEach(el=>el.onclick=()=>{
     const p=ctx.state.plans[+el.dataset.collapse];if(!p)return;
     if(collapsedPlans.has(p.id))collapsedPlans.delete(p.id);else collapsedPlans.add(p.id);renderPanel();
+  });
+  $("wsBody").querySelectorAll("[data-del]").forEach(el=>el.onclick=async ev=>{
+    ev.stopPropagation();
+    const id=el.dataset.del;
+    if(!confirm("Delete this plan? This can't be undone."))return;
+    // Optimistic removal, reconciled against the server.
+    const prev=ctx.state.plans.slice();
+    ctx.state.plans=ctx.state.plans.filter(p=>p.id!==id);renderPanel();
+    try{
+      const r=await fetch("/api/plans/"+encodeURIComponent(id),{method:"DELETE",credentials:"include"});
+      if(!r.ok)throw new Error("delete "+r.status);
+    }catch(e){ctx.state.plans=prev;renderPanel();console.warn("[plan delete] failed:",e.message);}
   });
   $("wsBody").querySelectorAll(".pstep").forEach(el=>el.onclick=ev=>{
     ev.stopPropagation();
@@ -604,6 +763,10 @@ function wirePanel(){
   });
   $("wsBody").querySelectorAll("[data-f]").forEach(el=>el.oninput=()=>{if(ctx.state.draft)ctx.state.draft[el.dataset.f]=el.value});
   const c=$("confirmBtn");if(c)c.onclick=()=>{const d=ctx.state.draft;send(d&&d.kind==="email"?"send it":"add it","text")};
+  const ds=$("docsSync");if(ds)ds.onclick=recallSync;
+  const dq=$("docsQ");if(dq)dq.oninput=()=>{docs.query=dq.value};
+  const dse=$("docsSearch");if(dse)dse.onclick=()=>{const q=(docs.query||"").trim();if(q)recallSearch(q)};
+  if(dq)dq.onkeydown=e=>{if(e.key==="Enter"){const q=(docs.query||"").trim();if(q)recallSearch(q)}};
 }
 /* HOOK 3 (LIVE): user manually ticked a step → tell the backend so the plan
    record stays consistent. The server returns the updated plan; we swap it into
@@ -627,7 +790,12 @@ async function onStepToggled(plan,stepIndex,done){
 }
 
 /* ============================ VISION VIEW (real shell) ================== */
-const vision={stream:null,recog:null,listening:false,analyzing:false,audioCtx:null,analyser:null,raf:null,micStream:null,lastObs:null,transcript:"",sessionId:null};
+const vision={stream:null,recog:null,listening:false,analyzing:false,audioCtx:null,analyser:null,raf:null,micStream:null,lastObs:null,transcript:"",sessionId:null,
+  // Guided ("point-and-coach") session state. When session.mode==="guided" the
+  // Analyze action routes through /api/orchestrate (which returns a coaching
+  // directive and checks steps off), and ending the session calls
+  // /api/vision/session/end for a spoken recap.
+  session:{mode:"describe",planId:null},watchFor:null,summaries:[]};
 function renderVision(){
   const v=$("viewVision");
   v.innerHTML=`<div class="vision">
@@ -636,9 +804,11 @@ function renderVision(){
       <div class="ring"></div>
       ${vision.stream?'<div class="livetag"><span class="d"></span>LIVE</div>':'<div class="off"><div class="ic">◉</div><div>Camera off. Start the live feed to let DaVinci see.</div></div>'}
     </div>
+    ${vision.session.mode==="guided"?`<div class="an" style="margin:2px 0 10px"><span>▶</span>Coaching session active${(()=>{const p=ctx.state.plans.find(x=>x.id===vision.session.planId);return p?" — "+esc(p.goal):"";})()}. Point the camera and tap Analyze; I'll guide each step.</div>`:""}
     <div class="vcontrols">
       <button class="vbtn ${vision.stream?'live':''}" id="vCam">${vision.stream?'◼ Stop feed':'▶ Start feed'}</button>
-      <button class="vbtn intel" id="vAnalyze" ${vision.stream?'':'disabled'}>${vision.analyzing?'◷ Analyzing…':'❖ Analyze scene'}</button>
+      <button class="vbtn intel" id="vAnalyze" ${vision.stream?'':'disabled'}>${vision.analyzing?(vision.session.mode==="guided"?'◷ Coaching…':'◷ Analyzing…'):(vision.session.mode==="guided"?'▶ Next step':'❖ Analyze scene')}</button>
+      ${vision.session.mode==="guided"?`<button class="vbtn" id="vEnd">◼ End session</button>`:""}
     </div>
     <div class="voice">
       <div class="vh"><span>Voice input</span><span class="st">${vision.listening?'listening':'idle'}</span></div>
@@ -666,6 +836,7 @@ function wireVision(){
   const an=$("vAnalyze");if(an&&vision.stream&&!vision.analyzing)an.onclick=analyzeFrame;
   const mic=$("vMic");if(mic)mic.onclick=toggleMic;
   const sp=$("vSpeak");if(sp)sp.onclick=speakLast;
+  const end=$("vEnd");if(end)end.onclick=async()=>{await endGuidedSession();renderVision();};
 }
 async function toggleCam(){
   if(vision.stream){vision.stream.getTracks().forEach(t=>t.stop());vision.stream=null;renderVision();return}
@@ -723,8 +894,19 @@ async function analyzeFrame(){
     return;
   }
 
-  vision.lastObs=observation;vision.analyzing=false;renderVision();
+  vision.lastObs=observation;
   const s=observation.scene||{};
+  if(s.summary)vision.summaries.push(s.summary);
+
+  // Guided session: hand the observation to the orchestrator for a coaching
+  // directive (and server-side step check-off). Otherwise, just describe.
+  if(vision.session.mode==="guided"){
+    await runGuidedTurn(observation);
+    vision.analyzing=false;renderVision();
+    return;
+  }
+
+  vision.analyzing=false;renderVision();
   const warn=(s.anomalies&&s.anomalies[0])||null;
   const summary=(s.summary||"").toLowerCase();
   const line=warn
@@ -733,13 +915,51 @@ async function analyzeFrame(){
   addAI(line,[{kind:"route",agent:"vision",reason:"live frame analyzed"}],s);
   speak(line);
 }
-function buildObservationEnvelope(frame,transcript,scene){
-  return {schema_version:"1.0",input_type:"visual",session_id:vision.sessionId||(vision.sessionId="vs-"+uid()),
-    timestamp:new Date().toISOString(),task_context:{task:transcript?"answer about scene":"observe",mode:"live"},scene,
-    user_flags:{explicitly_mentioned:[],user_transcript:transcript||""},
-    media_meta:{source_type:"camera",frame_index:null,resolution:"live",capture_device:"browser"},model:"mock-vision",
-    directive:{guidance:scene.anomalies[0]?("Watch the "+scene.objects[0].label.toLowerCase()):"All clear",watch_for:scene.anomalies[0]?scene.objects[0].label:null,done:false,done_message:""}}
+
+/* Guided coaching turn: POST the v1.0 observation to /api/orchestrate with the
+   active session. The server returns { guidance, watch_for, done, done_message,
+   step_checked } — it performs the step check-off itself; we reflect it here. */
+async function runGuidedTurn(observation){
+  let d=null;
+  try{
+    const r=await fetch("/api/orchestrate",{
+      method:"POST",headers:{"Content-Type":"application/json"},credentials:"include",
+      body:JSON.stringify({observation,session:{mode:"guided",planId:vision.session.planId}}),
+    });
+    if(!r.ok)throw new Error("orchestrate "+r.status);
+    d=await r.json();
+  }catch(e){
+    addAI("Lost the thread for a second — "+(e.message||"network error")+". Point the camera again and I'll pick back up.",null,null);
+    return;
+  }
+  vision.watchFor=d.watch_for||null;
+  // The server already checked the step off; pull the fresh plan so the panel
+  // and progress bar update, and acknowledge it inline.
+  if(typeof d.step_checked==="number"){
+    await hydratePlans();
+    const p=ctx.state.plans.find(x=>x.id===vision.session.planId);
+    const stepText=p&&p.steps[d.step_checked]?p.steps[d.step_checked].text:null;
+    if(stepText)addTraceLine(`✓ Checked off: ${stepText}`);
+  }
+  const guidance=d.guidance||"Keep going — I'm watching.";
+  addAI(guidance,[{kind:"route",agent:"vision",reason:"guided step"}],observation.scene);
+  speak(guidance);
+  if(d.done){
+    const msg=d.done_message||"That's everything — nice work.";
+    addAI(msg,null,null);speak(msg);
+    await endGuidedSession();
+  }
 }
+
+/* Tiny inline trace note (used for step check-offs during coaching). */
+function addTraceLine(text){
+  const d=document.createElement("div");d.className="msg";
+  d.innerHTML=`<div class="avatar">✓</div><div class="aiwrap"><div class="bubble ai" style="opacity:.85"><span class="edgebar"></span><p style="font-size:13px">${esc(text)}</p></div></div>`;
+  stream.appendChild(d);scrollDown();
+}
+/* (Removed buildObservationEnvelope — the server now owns the v1.0 envelope and
+   returns it from /api/vision. The guided directive comes from /api/orchestrate,
+   handled in runGuidedTurn below.) */
 function toggleMic(){
   const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
   if(!SR){alert("Speech recognition isn't supported here. Try Chrome.");return}
@@ -918,6 +1138,7 @@ $("btnWs").onclick=toggleWs;
 $("btnWsM").onclick=()=>app.classList.add("ws-open");
 $("btnMenu").onclick=()=>$("rail").classList.toggle("open");
 $("backdrop").onclick=()=>{app.classList.remove("ws-open");$("rail").classList.remove("open")};
+$("btnBrief").onclick=openBriefing;
 $("btnReset").onclick=()=>{ctx.state={plans:[],draft:null,claim:null};ctx.memory={preferences:{},past_patterns:[],long_term_facts:[]};stream.innerHTML="";panelTab="plans";renderPanel();greet()};
 
 function greet(){addAI("I'm DaVinci. Ask me something, set a goal, or share a scene — I'll route it to the right part of me and answer in one voice.",null,null)}
@@ -950,6 +1171,9 @@ async function hydrate(){
     if(mr.ok){const m=await mr.json();ctx.memory={preferences:m.preferences||{},past_patterns:m.past_patterns||[],long_term_facts:m.long_term_facts||[]};}
     if(wsView==="work")renderPanel();
   }catch(e){}
+  // Recall status + notifications hydrate in the background (non-blocking).
+  recallStatus().then(()=>{if(wsView==="work"&&panelTab==="docs")renderPanel()});
+  refreshNotifications();
 }
 
 /* boot with the brief load-skeleton moment */

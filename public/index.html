@@ -795,7 +795,11 @@ const vision={stream:null,recog:null,listening:false,analyzing:false,audioCtx:nu
   // Analyze action routes through /api/orchestrate (which returns a coaching
   // directive and checks steps off), and ending the session calls
   // /api/vision/session/end for a spoken recap.
-  session:{mode:"describe",planId:null},watchFor:null,summaries:[]};
+  session:{mode:"describe",planId:null},watchFor:null,summaries:[],
+  // Voice-driven action: lastPhrase is the most recent completed utterance
+  // (used as the query for a voice-triggered look); spokenActedLen tracks how
+  // much of the final transcript has already been acted on.
+  lastPhrase:null,spokenActedLen:0};
 function renderVision(){
   const v=$("viewVision");
   v.innerHTML=`<div class="vision">
@@ -865,6 +869,12 @@ async function analyzeFrame(){
   const canvas=document.createElement("canvas");canvas.width=vid.videoWidth;canvas.height=vid.videoHeight;
   canvas.getContext("2d").drawImage(vid,0,0,canvas.width,canvas.height);
   const frameDataUrl=canvas.toDataURL("image/jpeg",0.7);
+  // Prefer the most recent spoken phrase (voice-triggered look) so DaVinci
+  // answers the actual question; fall back to the full transcript for a manual
+  // Analyze press. Clear lastPhrase after reading it so a later manual press
+  // doesn't reuse a stale question.
+  const query=(vision.lastPhrase||vision.transcript||"").trim();
+  vision.lastPhrase=null;
 
   let observation=null;
   try{
@@ -875,8 +885,8 @@ async function analyzeFrame(){
       body:JSON.stringify({
         image:frameDataUrl,
         tier:"deep",
-        task_context:{task:vision.transcript?"answer about scene":"observe",mode:"live"},
-        user_transcript:vision.transcript||"",
+        task_context:{task:query?"answer about scene":"observe",mode:"live"},
+        user_transcript:query,
         recent:vision.lastObs?[vision.lastObs.scene.summary]:[],
         media_meta:{source_type:"camera",resolution:"live",capture_device:"browser"},
       }),
@@ -965,10 +975,47 @@ function toggleMic(){
   if(!SR){alert("Speech recognition isn't supported here. Try Chrome.");return}
   if(vision.listening){vision.recog&&vision.recog.stop();return}
   vision.recog=new SR();vision.recog.continuous=true;vision.recog.interimResults=true;vision.recog.lang="en-US";
-  vision.recog.onresult=e=>{let txt="";for(let i=0;i<e.results.length;i++)txt+=e.results[i][0].transcript;vision.transcript=txt;renderVision()};
+  // Track how much of the transcript we've already acted on, so each new spoken
+  // phrase triggers exactly one look — not the whole accumulated transcript.
+  vision.spokenActedLen=0;
+  vision.recog.onresult=e=>{
+    let txt="",finalTxt="",sawFinal=false;
+    for(let i=0;i<e.results.length;i++){
+      txt+=e.results[i][0].transcript;
+      if(e.results[i].isFinal){finalTxt+=e.results[i][0].transcript;sawFinal=true;}
+    }
+    vision.transcript=txt;renderVision();
+    // A completed utterance (natural pause) is the user's cue to ACT. Fire once
+    // per new final phrase, debounced so a burst of finals doesn't stack calls.
+    if(sawFinal){
+      const phrase=finalTxt.slice(vision.spokenActedLen).trim();
+      vision.spokenActedLen=finalTxt.length;
+      if(phrase){vision.lastPhrase=phrase;onSpokenPhrase(phrase);}
+    }
+  };
   vision.recog.onend=()=>{vision.listening=false;stopMeter();renderVision()};
   vision.recog.onerror=()=>{vision.listening=false;stopMeter();renderVision()};
   vision.recog.start();vision.listening=true;renderVision();startMeter();
+}
+/* The user said something to DaVinci in the Vision panel. Act on it: if the
+   camera is live, look at the current frame and answer (guided coaching turn if
+   a session is active, otherwise a one-shot describe/answer). If the camera is
+   off, say so out loud instead of silently swallowing the speech. */
+let spokenDebounce=null;
+function onSpokenPhrase(phrase){
+  if(spokenDebounce)clearTimeout(spokenDebounce);
+  spokenDebounce=setTimeout(async()=>{
+    if(vision.analyzing)return;               // a look is already in flight
+    if(!vision.stream){
+      const msg="I'm listening, but the camera's off — tap Start feed and I'll look while you talk.";
+      addAI(msg,null,null);speak(msg);
+      return;
+    }
+    // The transcript already holds the phrase; analyzeFrame() reads it and sends
+    // it as user_transcript, so DaVinci answers the actual question about what
+    // it sees.
+    await analyzeFrame();
+  },700);
 }
 async function startMeter(){
   try{const s=await navigator.mediaDevices.getUserMedia({audio:true});

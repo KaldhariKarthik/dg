@@ -1,0 +1,956 @@
+/**
+ * src/server.ts — the HTTP edge. THE SINGLE SERVER ENTRYPOINT.
+ *
+ * Multi-user: every request's identity comes from a server-side session resolved
+ * from an httpOnly cookie (attachUser middleware). No route trusts a client-sent
+ * id. The old `"default"` / `session_id`-in-body / `sess_random` identities are
+ * gone — everything keys off the authenticated `req.userId` (Google sub).
+ *
+ * Routes:
+ *   GET  /api/auth/google           -> begin Google login (identity+Gmail+Cal)
+ *   GET  /api/auth/google/callback  -> verify, upsert user, mint session
+ *   POST /api/auth/logout           -> revoke session
+ *   GET  /api/me                    -> current user + connected capabilities
+ *   POST /api/chat        (auth)    -> { message } -> { reply, offer? }
+ *   POST /api/vision      (auth)    -> { image, tier?, ... } -> v1.0 envelope
+ *   POST /api/orchestrate (auth)    -> { observation } -> directive (+ step_checked)
+ *   POST /api/vision/session/end (auth) -> { planId, summaries } -> { recap }
+ *   POST /api/recall/sync (auth)    -> index the user's Drive
+ *   GET  /api/recall/search (auth)  -> { q } -> ranked hits
+ *   GET  /api/recall/status (auth)  -> { docs, chunks }
+ *   static public/
+ *
+ * Stability fixes folded in here:
+ *   Fix 3 — per-user rate limits on /api/vision and /api/orchestrate (the model
+ *           endpoints the untrusted client polls).
+ *   Fix 4 — CORS pinned to a configured origin instead of reflecting any origin
+ *           with credentials.
+ *   Fix 5 — the "guide me with the camera" offer is now actually emitted from
+ *           /api/chat when a hands-on plan is created/updated (isPhysicalTask was
+ *           dead code; the frontend already listens for `offer.planId`).
+ *   Fix 6 — the direct vision generateContent call is wrapped in withTimeout (the
+ *           rest of the model calls go through GeminiProvider, already wrapped).
+ */
+
+import "dotenv/config";
+import express, { Request, Response } from "express";
+import cors from "cors";
+import { randomBytes } from "crypto";
+import { GoogleGenAI } from "@google/genai";
+import { AgentRequest, Context, CONTRACT_VERSION, MemoryData } from "./core/types";
+import { AgentRegistry } from "./core/registry";
+import { KeywordRouter, LlmRouter, Router } from "./core/router";
+import { Orchestrator } from "./agents/orchestrator";
+import { ResearcherAgent } from "./agents/researcher";
+import { PlannerAgent } from "./agents/planner";
+import { ExecutorAgent } from "./agents/executor";
+import { ConversationalAgent } from "./agents/conversational";
+import { VisionAgent } from "./agents/vision";
+import { buildBrain } from "./llm/factory";
+import { LLMImage } from "./llm/provider";
+import { LastMessageSynthesizer, LlmSynthesizer, Synthesizer } from "./core/synthesizer";
+import { GoogleAuth, NotConnectedError } from "./adapters/google-auth";
+import { GoogleGmailAdapter } from "./adapters/gmail";
+import { GoogleCalendarAdapter } from "./adapters/calendar";
+import { GoogleLogin } from "./auth/googleOAuth";
+import {
+    makeAttachUser,
+    requireAuth,
+    setSessionCookie,
+    clearSessionCookie,
+    setOAuthStateCookie,
+    clearOAuthStateCookie,
+    readCookie,
+    OAUTH_STATE_COOKIE,
+    SESSION_COOKIE,
+} from "./auth/middleware";
+import { buildStores } from "./store/factory";
+import { Plan, ProposedPlan, normalizePlan } from "./store/planStore";
+import { rateLimitPerUser } from "./middleware/rateLimit";
+import { withTimeout } from "./util/withTimeout";
+import { createServer } from "http";
+import { attachLiveServer } from "./live/liveServer";
+import { GoogleDriveAdapter } from "./adapters/drive";
+import { Embedder } from "./recall/embeddings";
+import { OpenAIEmbedder } from "./recall/openaiEmbeddings";
+import { RecallService } from "./recall/recall";
+import { mountRecallRoutes } from "./recall/routes";
+import { ProactiveService } from "./proactive/proactive";
+import { mountProactiveRoutes } from "./proactive/routes";
+
+// --- config -----------------------------------------------------------------
+const PORT = process.env.PORT ? Number(process.env.PORT) : 8080;
+// Brain keys. Anthropic is the default vendor for the reasoning agents; Gemini
+// is kept for the voice Live API (no Anthropic equivalent) and as a fallback.
+const anthropicKey = (process.env.ANTHROPIC_API_KEY ?? "").trim();
+const geminiKey = (process.env.GEMINI_API_KEY ?? process.env.API_KEY ?? "").trim();
+// Embeddings now run on OpenAI (text-embedding-3-small). Falls back to Gemini
+// embeddings only if no OpenAI key is set.
+const openaiKey = (process.env.OPENAI_API_KEY ?? "").trim();
+const apiKey = geminiKey; // back-compat alias used by the Gemini-only Live path
+const cronKey = (process.env.CRON_KEY ?? "").trim();
+// Vision is handled by brain.vision (Sonnet 4.6 by default — strong image
+// understanding). These remain only as Gemini-fallback model hints if the
+// vendor is gemini; the active model id is brain.vision.modelId.
+const VISION_MODEL_FAST = (process.env.VISION_MODEL_FAST ?? "gemini-3.1-flash-lite").trim();
+const VISION_MODEL_DEEP = (process.env.VISION_MODEL_DEEP ?? "gemini-3.5-flash").trim();
+const VISION_TIMEOUT_MS = 25_000;
+const LIVE_MODEL = (process.env.LIVE_MODEL ?? "gemini-3.1-flash-live-preview").trim();
+// Warm female voice. Swap via LIVE_VOICE; nice alts: Leda, Kore, Sulafat, Callirrhoe, Achernar.
+const LIVE_VOICE = (process.env.LIVE_VOICE ?? "Aoede").trim();
+const LIVE_SYSTEM =
+    "You are DaVinci — a calm, warm, concise personal assistant speaking out loud " +
+    "and, when the camera is on, seeing what the user sees. Keep spoken replies " +
+    "short and natural, like a person beside them. Never mention that you are an " +
+    "AI, or talk about cameras, frames, audio, or tools.\n\n" +
+    "You can act using tools: read and update the user's plans, check steps off, " +
+    "recall and remember things about them, and draft/send email and calendar " +
+    "events. CONFIRMATION IS MANDATORY for anything that touches the outside world: " +
+    "for email, always compose_email first, read the draft aloud, and ask the user " +
+    "to confirm; only call send_email after they clearly agree. For calendar, " +
+    "always propose_event first and confirm before create_event. Never send or " +
+    "create without a spoken yes. If they're working with their hands, guide one " +
+    "step at a time and check_step off only when you can see it's genuinely done." +
+    "When planning time-bound work or before agreeing to a commitment, check the " +
+    "user's real calendar with list_events or find_free_time first. Fit work into " +
+    "the hours that actually exist, and warn them plainly when something conflicts " +
+    "or a new commitment would jeopardize a deadline — name the specific clash. " +
+    "When the user asks about something they wrote, saved, or decided, or refers to " +
+    "a note, doc, or file of theirs, call search_documents to find it before " +
+    "answering, and name the document you drew from.";
+
+// Fix 4: the app is served same-origin (express.static below), so cross-origin
+// requests are not needed for normal use. Default to no cross-origin access;
+// set APP_ORIGIN to explicitly allow one origin (e.g. a separate front-end host).
+const appOrigin = (process.env.APP_ORIGIN ?? "").trim();
+
+if (!anthropicKey && !geminiKey) {
+    console.error(
+        "[fatal] No brain API key. Set ANTHROPIC_API_KEY (recommended) or " +
+        "GEMINI_API_KEY. Voice (Live) additionally needs GEMINI_API_KEY."
+    );
+    process.exit(1);
+}
+if (!openaiKey && !geminiKey) {
+    console.error(
+        "[fatal] No embeddings key. Set OPENAI_API_KEY (recommended) or " +
+        "GEMINI_API_KEY to fall back to Gemini embeddings."
+    );
+    process.exit(1);
+}
+
+// Multi-user REQUIRES Google login, so Google OAuth must be configured.
+const googleCfg = {
+    clientId: (process.env.GOOGLE_CLIENT_ID ?? "").trim(),
+    clientSecret: (process.env.GOOGLE_CLIENT_SECRET ?? "").trim(),
+    redirectUri: (process.env.GOOGLE_REDIRECT_URI ?? "").trim(),
+};
+if (!googleCfg.clientId || !googleCfg.clientSecret || !googleCfg.redirectUri) {
+    console.error(
+        "[fatal] Google OAuth not configured. Multi-user login needs " +
+        "GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, GOOGLE_REDIRECT_URI " +
+        "(redirect URI must point to /api/auth/google/callback)."
+    );
+    process.exit(1);
+}
+
+// --- wiring (built once at startup) -----------------------------------------
+// One switch picks vendor + per-role models. agents=Sonnet, router=Haiku,
+// vision=Sonnet by default (override via LLM_VENDOR / *_MODEL env).
+const brain = buildBrain({ anthropicKey, geminiKey });
+const llm = brain.agent; // everything that isn't router/vision uses this
+console.log(
+    `[brain] ${brain.vendor} active ` +
+    `(agent: ${brain.agent.modelId}, router: ${brain.router.modelId}, ` +
+    `vision: ${brain.vision.modelId})`
+);
+
+const stores = buildStores();
+const { users, sessions, working: store, memory: memoryStore, plans } = stores;
+
+const googleLogin = new GoogleLogin(googleCfg);
+const googleApiAuth = new GoogleAuth(googleCfg, users);
+console.log("[auth] Google OAuth configured.");
+
+// Per-user adapter factories handed to the executor.
+const gmailFactory = (userId: string) => new GoogleGmailAdapter(googleApiAuth, userId);
+const calendarFactory = (userId: string) => new GoogleCalendarAdapter(googleApiAuth, userId);
+
+// Recall: read-only Drive adapter + embeddings + semantic search over the
+// user's documents. driveFactory mirrors the gmail/calendar factory shape.
+const driveFactory = (userId: string) => new GoogleDriveAdapter(googleApiAuth, userId);
+const embedder = openaiKey
+    ? new OpenAIEmbedder(openaiKey)
+    : new Embedder(geminiKey);
+console.log(`[recall] embeddings via ${openaiKey ? "OpenAI" : "Gemini"}`);
+const recall = new RecallService(stores.documents, embedder, driveFactory);
+const proactive = new ProactiveService(stores.notifications, plans, memoryStore, calendarFactory, llm);
+const registry = new AgentRegistry();
+registry.register(new ResearcherAgent(llm));
+registry.register(new PlannerAgent(llm));
+registry.register(new ConversationalAgent(llm));
+registry.register(new VisionAgent(llm));
+registry.register(new ExecutorAgent(llm, gmailFactory, calendarFactory));
+
+// Router runs every turn → cheap/fast model.
+const router: Router = new LlmRouter(brain.router);
+void KeywordRouter;
+
+const synth: Synthesizer = new LlmSynthesizer(llm);
+void LastMessageSynthesizer;
+
+const orchestrator = new Orchestrator(registry, router, synth, llm, memoryStore, { maxSteps: 4 });
+
+// Gemini client retained ONLY for the voice Live API (no Anthropic equivalent).
+const visionAI = new GoogleGenAI({ apiKey: geminiKey });
+
+// Fix 3: per-user limiters for the model-backed vision endpoints. Generous
+// enough not to break a legitimately fast scene (the client only SENDS on a
+// changed frame), tight enough to bound a runaway/abusive client's spend.
+// Tunable via env. Each endpoint gets its own budget since they're called ~1:1.
+const VISION_RATE_MAX = Number(process.env.VISION_RATE_MAX ?? 120);
+const visionLimit = rateLimitPerUser({ max: VISION_RATE_MAX, windowMs: 60_000, name: "vision" });
+const orchestrateLimit = rateLimitPerUser({ max: VISION_RATE_MAX, windowMs: 60_000, name: "vision" });
+
+// --- app --------------------------------------------------------------------
+const app = express();
+app.set("trust proxy", true);
+app.use(express.json({ limit: "10mb" }));
+// Fix 4: pin CORS. With a same-origin front-end no cross-origin access is needed,
+// so the default is to allow none; APP_ORIGIN opens exactly one origin.
+app.use(
+    cors({
+        origin: appOrigin || false,
+        credentials: true,
+    })
+);
+app.use(makeAttachUser(sessions)); // populates req.userId from the session cookie
+app.use(express.static("public"));
+
+// Recall REST surface (sync / search / status). Mounted here, where `app`,
+// `requireAuth`, and `recall` all exist. getUserId mirrors how the other
+// protected routes read identity (req.userId, set by attachUser).
+mountRecallRoutes(app, requireAuth, recall, (req) => (req as any).userId ?? null);
+mountProactiveRoutes(app, requireAuth, proactive, stores.notifications, (req) => (req as any).userId ?? null, cronKey);
+/* ============================ AUTH ROUTES ============================== */
+
+// GET /api/auth/google — begin login. Sets an anti-CSRF state cookie and
+// redirects to Google's consent screen (identity + Gmail + Calendar + Drive).
+app.get("/api/auth/google", (_req: Request, res: Response) => {
+    const state = randomBytes(16).toString("hex");
+    setOAuthStateCookie(res, state);
+    res.redirect(googleLogin.consentUrl(state));
+});
+
+// GET /api/auth/google/callback — verify, upsert user, mint session.
+app.get("/api/auth/google/callback", async (req: Request, res: Response) => {
+    const code = req.query.code as string | undefined;
+    const state = req.query.state as string | undefined;
+    const expected = readCookie(req, OAUTH_STATE_COOKIE);
+    clearOAuthStateCookie(res);
+
+    if (!code) return res.status(400).send("Missing authorization code.");
+    if (!state || !expected || state !== expected) {
+        return res.status(400).send("Invalid OAuth state. Please try signing in again.");
+    }
+
+    try {
+        const verified = await googleLogin.handleCallback(code);
+        await users.upsertUser({
+            id: verified.userId,
+            email: verified.email,
+            displayName: verified.displayName,
+        });
+        // Only overwrite the stored credential if Google gave us a refresh
+        // token (it does on first consent + prompt=consent). Otherwise merge so
+        // we keep the existing one.
+        if (verified.google.refresh_token) {
+            await users.setGoogleCredential(verified.userId, verified.google);
+        } else {
+            await users.mergeGoogleTokens(verified.userId, verified.google);
+        }
+
+        const session = await sessions.create(verified.userId);
+        setSessionCookie(res, session.id);
+        res.redirect("/");
+    } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        console.error("OAuth callback error:", msg);
+        res.status(500).send("Failed to sign in with Google: " + msg);
+    }
+});
+
+// POST /api/auth/logout — revoke this session.
+app.post("/api/auth/logout", async (req: Request, res: Response) => {
+    const sid = readCookie(req, SESSION_COOKIE);
+    if (sid) await sessions.revoke(sid).catch(() => { });
+    clearSessionCookie(res);
+    res.json({ ok: true });
+});
+
+// GET /api/me — who am I, and what's connected.
+app.get("/api/me", requireAuth, async (req: Request, res: Response) => {
+    const user = await users.getUser(req.userId!);
+    if (!user) return res.status(401).json({ error: "Not authenticated." });
+    const scopes = user.google?.scopes ?? [];
+    res.json({
+        id: user.id,
+        email: user.email,
+        displayName: user.displayName,
+        connected: {
+            google: Boolean(user.google?.refresh_token),
+            gmail: scopes.includes("https://www.googleapis.com/auth/gmail.send"),
+            calendar: scopes.includes("https://www.googleapis.com/auth/calendar"),
+            drive: scopes.includes("https://www.googleapis.com/auth/drive.readonly"),
+        },
+    });
+});
+
+// GET /api/memory — the current user's long-term memory profile.
+app.get("/api/memory", requireAuth, async (req: Request, res: Response) => {
+    try {
+        const mem = await memoryStore.loadMemory(req.userId!);
+        res.json(mem);
+    } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        console.error("Memory error:", msg);
+        res.status(500).json({ error: msg });
+    }
+});
+
+/* ============================ APP ROUTES ============================== */
+
+/**
+ * If the planner proposed a plan this turn (stateDelta.planUpsert), upsert it
+ * into the PlanStore — the SERVER owns id + timestamps via normalizePlan, so a
+ * fumbled generation can't drift an id or erase createdAt. Then strip plan keys
+ * from the working bag: plans live only in the PlanStore, never the bag.
+ *
+ * Returns the committed plan id (or null on a report-only turn) so the caller
+ * can decide whether to offer a camera-guided session for it.
+ */
+async function commitPlanUpsert(ctx: Context, userId: string): Promise<string | null> {
+    const proposed = ctx.state.planUpsert as ProposedPlan | undefined;
+    let committedId: string | null = null;
+    if (proposed && typeof proposed === "object") {
+        const existing = proposed.id ? await plans.getPlan(userId, proposed.id) : null;
+        const normalized = normalizePlan(proposed, existing);
+        await plans.upsertPlan(userId, normalized);
+        committedId = normalized.id;
+    }
+    delete ctx.state.planUpsert;
+    delete ctx.state.plans;
+    delete ctx.state.sessionMode;
+    delete ctx.state.activePlan;
+    return committedId;
+}
+
+function isPhysicalTask(plan: ProposedPlan): boolean {
+    const text = [plan.goal ?? "", ...(Array.isArray(plan.steps) ? plan.steps.map((s) => s.text) : [])]
+        .join(" ").toLowerCase();
+    return /\b(cook|bake|fry|grill|roast|knead|chop|brew|make|prepare|assemble|build|install|mount|fix|repair|replace|wire|paint|sand|drill|screw|glue|sew|knit|fold|plant|pot|repot|water|clean|wash|set ?up|craft|draw|sketch|wrap|tie)\b/.test(text);
+}
+
+/**
+ * Map an open executor draft (email or calendar event) in the working state
+ * onto the lightweight shape the UI's Drafts panel renders. Returns null when
+ * there's no draft to confirm. Only "confirming"-stage drafts surface — a
+ * half-built email still waiting on a recipient isn't shown as ready.
+ */
+function toUiDraft(state: Record<string, unknown>): unknown | null {
+    const email = state["emailDraft"] as
+        | { kind: "email"; stage: string; to: string[]; subject: string | null; body: string | null }
+        | null
+        | undefined;
+    if (email && email.stage === "confirming") {
+        return {
+            kind: "email",
+            to: (email.to ?? []).join(", "),
+            subject: email.subject ?? "",
+            body: email.body ?? "",
+        };
+    }
+    const ev = state["eventDraft"] as
+        | { kind: "event"; stage: string; summary: string; start: string; end: string }
+        | null
+        | undefined;
+    if (ev && ev.stage === "confirming") {
+        // Render start time + a rough duration for the panel.
+        const start = ev.start ? new Date(ev.start) : null;
+        const end = ev.end ? new Date(ev.end) : null;
+        const when = start
+            ? start.toLocaleString(undefined, { weekday: "short", hour: "numeric", minute: "2-digit" })
+            : "";
+        let duration = "";
+        if (start && end) {
+            const mins = Math.max(0, Math.round((end.getTime() - start.getTime()) / 60000));
+            duration = mins >= 60 ? `${Math.round(mins / 60)} hr` : `${mins} min`;
+        }
+        return { kind: "event", title: ev.summary ?? "Event", when, duration };
+    }
+    return null;
+}
+
+// GET /api/plans — the current user's live plans (most-recently-updated first).
+app.get("/api/plans", requireAuth, async (req: Request, res: Response) => {
+    try {
+        res.json({ plans: await plans.listPlans(req.userId!) });
+    } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        console.error("Plans error:", msg);
+        res.status(500).json({ error: msg });
+    }
+});
+
+// POST /api/plans/step — check a step on/off. Atomic per-plan on Firestore.
+app.post("/api/plans/step", requireAuth, async (req: Request, res: Response) => {
+    try {
+        const { planId, stepIndex, done } = req.body as {
+            planId?: string;
+            stepIndex?: number;
+            done?: boolean;
+        };
+        if (!planId || typeof stepIndex !== "number") {
+            return res.status(400).json({ error: "planId and numeric stepIndex are required." });
+        }
+        const updated = await plans.setStepDone(req.userId!, planId, stepIndex, Boolean(done));
+        if (!updated) return res.status(404).json({ error: "Plan not found." });
+        res.json({ plan: updated });
+    } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        console.error("Plan step error:", msg);
+        res.status(500).json({ error: msg });
+    }
+});
+
+// DELETE /api/plans/:id — remove a plan the user no longer wants.
+app.delete("/api/plans/:id", requireAuth, async (req: Request, res: Response) => {
+    try {
+        await plans.deletePlan(req.userId!, String(req.params.id));
+        res.json({ ok: true });
+    } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        console.error("Plan delete error:", msg);
+        res.status(500).json({ error: msg });
+    }
+});
+
+// POST /api/chat -------------------------------------------------------------
+app.post("/api/chat", requireAuth, async (req: Request, res: Response) => {
+    try {
+        const { message } = req.body as { message?: string };
+        if (!message) return res.status(400).json({ error: "message is required." });
+
+        const userId = req.userId!;
+        const state = await store.load(userId);
+
+        // Plans live in their OWN store, not the working bag. Inject the current
+        // set for the planner to read this turn; stripped again before save.
+        state.plans = await plans.listPlans(userId);
+
+        type StoredTurn = {
+            role:
+            | "user" | "researcher" | "planner" | "executor"
+            | "conversational" | "vision" | "orchestrator";
+            message: string;
+            at: string;
+        };
+        const storedHistory: StoredTurn[] = Array.isArray(state.conversation)
+            ? (state.conversation as StoredTurn[])
+            : [];
+
+        storedHistory.push({ role: "user", message, at: new Date().toISOString() });
+
+        const ctx: Context = {
+            userId,
+            state,
+            history: storedHistory,
+            startedAt: new Date().toISOString(),
+        };
+
+        const agentReq: AgentRequest = {
+            contractVersion: CONTRACT_VERSION,
+            input: { kind: "text", text: message },
+        };
+
+        const result = await orchestrator.run(agentReq, ctx);
+
+        const committedPlanId = await commitPlanUpsert(ctx, userId);
+        ctx.state.conversation = ctx.history.slice(-40);
+        await store.save(userId, ctx.state);
+
+        // Fix 5: if we just created/updated a hands-on, physical plan, offer to
+        // guide it with the camera (the planning -> vision bridge). The frontend
+        // listens for `offer.planId` and renders a "guide me with the camera"
+        // chip. committedPlanId is null on report-only turns, so the offer only
+        // fires when a plan was actually written.
+        let offer: { planId: string; prompt: string } | undefined;
+        if (committedPlanId) {
+            try {
+                const plan = await plans.getPlan(userId, committedPlanId);
+                if (plan && isPhysicalTask(plan)) {
+                    offer = {
+                        planId: plan.id,
+                        prompt: `Want me to guide you through "${plan.goal}" with the camera?`,
+                    };
+                }
+            } catch (e) {
+                console.error("[chat] offer check failed:", e);
+            }
+        }
+
+        res.json({ reply: result.message, ...(offer ? { offer } : {}) });
+    } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        console.error("Chat error:", msg);
+        res.status(500).json({ error: msg });
+    }
+});
+
+// POST /api/chat/stream ------------------------------------------------------
+// Same brain as /api/chat, but streams the orchestrator's REAL progress events
+// (route / agent / synth / memory / done) to the browser over SSE so the UI's
+// trace flow reflects what actually happened. Auth + persistence identical.
+app.post("/api/chat/stream", requireAuth, async (req: Request, res: Response) => {
+    // SSE headers. Flush early so the client's EventSource/stream opens promptly.
+    res.writeHead(200, {
+        "Content-Type": "text/event-stream",
+        "Cache-Control": "no-cache, no-transform",
+        Connection: "keep-alive",
+        "X-Accel-Buffering": "no", // disable proxy buffering (nginx/Cloud Run)
+    });
+    const send = (event: string, data: unknown) => {
+        res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+    };
+
+    try {
+        const { message } = req.body as { message?: string };
+        if (!message) {
+            send("error", { error: "message is required." });
+            return res.end();
+        }
+
+        const userId = req.userId!;
+        const state = await store.load(userId);
+        state.plans = await plans.listPlans(userId);
+
+        type StoredTurn = {
+            role:
+            | "user" | "researcher" | "planner" | "executor"
+            | "conversational" | "vision" | "orchestrator";
+            message: string;
+            at: string;
+        };
+        const storedHistory: StoredTurn[] = Array.isArray(state.conversation)
+            ? (state.conversation as StoredTurn[])
+            : [];
+        storedHistory.push({ role: "user", message, at: new Date().toISOString() });
+
+        const ctx: Context = {
+            userId,
+            state,
+            history: storedHistory,
+            startedAt: new Date().toISOString(),
+        };
+        const agentReq: AgentRequest = {
+            contractVersion: CONTRACT_VERSION,
+            input: { kind: "text", text: message },
+        };
+
+        // Forward each orchestrator event to the browser as it happens.
+        const result = await orchestrator.run(agentReq, ctx, (ev) => {
+            send(ev.type, ev);
+        });
+
+        // Persist exactly like /api/chat.
+        const committedPlanId = await commitPlanUpsert(ctx, userId);
+        ctx.state.conversation = ctx.history.slice(-40);
+        await store.save(userId, ctx.state);
+
+        // Same "guide me with the camera" offer for physical plans.
+        let offer: { planId: string; prompt: string } | undefined;
+        if (committedPlanId) {
+            try {
+                const plan = await plans.getPlan(userId, committedPlanId);
+                if (plan && isPhysicalTask(plan)) {
+                    offer = {
+                        planId: plan.id,
+                        prompt: `Want me to guide you through "${plan.goal}" with the camera?`,
+                    };
+                }
+            } catch (e) {
+                console.error("[chat/stream] offer check failed:", e);
+            }
+        }
+
+        // Surface any open executor draft so the Drafts panel can render it
+        // and the user can confirm/edit. Map the backend's persisted shapes onto
+        // the UI's lightweight draft shape (kind + a few fields).
+        const uiDraft = toUiDraft(ctx.state);
+
+        // Final consolidated payload (reply + plans snapshot for the panel).
+        send("final", {
+            reply: result.message,
+            plans: await plans.listPlans(userId),
+            draft: uiDraft,
+            ...(offer ? { offer } : {}),
+        });
+        res.end();
+    } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        console.error("Chat stream error:", msg);
+        send("error", { error: msg });
+        res.end();
+    }
+});
+const VISION_SYSTEM = `You are DaVinci's vision module. You receive one camera frame plus optional task context,
+recent scene summaries, and an optional user transcript. Reply with ONE JSON object and nothing else —
+no markdown, no code fences, no prose. Describe only what is actually visible; never invent detail.
+Use the task context to judge relevance and to flag expected-but-missing items.
+
+Output exactly this shape:
+{
+  "task_context": { "task": string, "mode": string },
+  "scene": {
+    "summary": string,
+    "environment": string,
+    "objects": [
+      { "id": string, "label": string, "state": string, "position": string|null, "confidence": number }
+    ],
+    "spatial_layout": { "description": string, "dimensions_available": boolean },
+    "anomalies": [ { "type": string, "description": string } ]
+  },
+  "user_flags": { "explicitly_mentioned": string[] }
+}
+
+Rules:
+- object id: sequential, "obj_01", "obj_02", ...
+- confidence: 0..1.
+- If the task implies an item that should be present but is absent (e.g. oil while frying),
+  include it as an object with state "not detected" and raise an anomaly for it.
+- anomalies[].type is one of "warning", "info", "danger". Use [] when nothing is wrong.
+- explicitly_mentioned: object labels the user named in their transcript; [] if none.
+- If "task" is not provided in context, infer it from the scene. Echo "mode" as given (default "observe").
+- Salient objects only. Keep every string short.`;
+
+app.post("/api/vision", requireAuth, visionLimit, async (req: Request, res: Response) => {
+    try {
+        const {
+            image, tier, task_context, user_transcript, recent, media_meta,
+        } = req.body as {
+            image?: string;
+            tier?: string;
+            task_context?: { task?: string; mode?: string };
+            user_transcript?: string;
+            recent?: string[];
+            media_meta?: Record<string, unknown>;
+        };
+        if (!image) return res.status(400).json({ error: "image is required." });
+
+        const modelName = brain.vision.modelId;
+
+        const ctxLine =
+            `Context — task: ${task_context?.task || "infer it"}; mode: ${task_context?.mode || "observe"}; ` +
+            `recent: ${(recent || []).filter(Boolean).join(" | ") || "none"}.`;
+        const qLine =
+            user_transcript && user_transcript.trim()
+                ? `User transcript: "${user_transcript.trim()}". Note referenced objects in explicitly_mentioned.`
+                : "No user transcript.";
+        const prompt = [ctxLine, qLine, "Return only the JSON object from your instructions."].join("\n");
+        const base64Data = image.replace(/^data:image\/\w+;base64,/, "");
+        const img: LLMImage = { base64: base64Data, mimeType: "image/jpeg" };
+
+        // Primary path: vendor-neutral vision call (Sonnet 4.6 by default), with
+        // its own hard timeout inside the provider. The `tier` hint maps to a
+        // larger output budget for "deep" requests.
+        let rawJson: string;
+        if (brain.vision.completeWithImage) {
+            rawJson = await brain.vision.completeWithImage(prompt, img, {
+                system: VISION_SYSTEM,
+                json: true,
+                maxOutputTokens: tier === "deep" ? 1500 : 900,
+            });
+        } else {
+            // Fallback: direct Gemini call (only reached if the active provider
+            // somehow lacks image support).
+            const fallbackModel = tier === "deep" ? VISION_MODEL_DEEP : VISION_MODEL_FAST;
+            const response = await withTimeout(
+                visionAI.models.generateContent({
+                    model: fallbackModel,
+                    contents: [
+                        {
+                            role: "user",
+                            parts: [
+                                { text: prompt },
+                                { inlineData: { mimeType: "image/jpeg", data: base64Data } },
+                            ],
+                        },
+                    ],
+                    config: {
+                        systemInstruction: VISION_SYSTEM,
+                        responseMimeType: "application/json",
+                    },
+                }),
+                VISION_TIMEOUT_MS,
+                `vision ${fallbackModel}`
+            );
+            rawJson = response.text ?? "";
+        }
+
+        const m = normalize(safeParse(rawJson));
+
+        res.json({
+            schema_version: "1.0",
+            input_type: "visual",
+            session_id: req.userId, // authenticated user, not a client-sent id
+            timestamp: new Date().toISOString(),
+            task_context: {
+                task: task_context?.task || m.task_context.task || "unknown",
+                mode: task_context?.mode || m.task_context.mode || "observe",
+            },
+            scene: m.scene,
+            user_flags: {
+                explicitly_mentioned: m.user_flags.explicitly_mentioned,
+                user_transcript: user_transcript || "",
+            },
+            media_meta: media_meta || {
+                source_type: "video_frame",
+                frame_index: null,
+                resolution: null,
+                capture_device: "unknown",
+            },
+            model: modelName,
+        });
+    } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        console.error("Vision error:", msg);
+        res.status(500).json({ error: msg });
+    }
+});
+
+// POST /api/orchestrate ------------------------------------------------------
+app.post("/api/orchestrate", requireAuth, orchestrateLimit, async (req: Request, res: Response) => {
+    try {
+        const { observation, session } = req.body as {
+            observation?: any;
+            session?: { mode?: string; planId?: string };
+        };
+        if (!observation) return res.status(400).json({ error: "observation is required." });
+
+        const userId = req.userId!;
+        const state = await store.load(userId);
+        state.plans = await plans.listPlans(userId);
+
+        // Guided session: bind the active plan so the vision agent reasons against
+        // it. Injected into ctx.state like plans; stripped after the turn by
+        // commitPlanUpsert. A plain "describe" session injects nothing.
+        if (session?.mode === "guided") {
+            state.sessionMode = "guided";
+            if (session.planId) {
+                const active = (state.plans as Plan[]).find((p) => p.id === session.planId);
+                if (active) state.activePlan = active;
+            }
+        }
+
+        const transcript = observation?.user_flags?.user_transcript || undefined;
+
+        const ctx: Context = {
+            userId,
+            state,
+            history: [], // vision observations don't pollute the chat transcript
+            startedAt: new Date().toISOString(),
+        };
+
+        const agentReq: AgentRequest = {
+            contractVersion: CONTRACT_VERSION,
+            input: { kind: "scene", scene: observation, text: transcript },
+        };
+
+        const result = await orchestrator.run(agentReq, ctx);
+        await commitPlanUpsert(ctx, userId);
+        await store.save(userId, ctx.state);
+
+        const directive = ((result.data as any) || {}).result || {};
+
+        // FIX: actually perform the guided step check-off the vision agent decided
+        // on. The agent only ever returns a validated, not-yet-done step index
+        // (see VisionAgent.validateStepAction), but the write itself is the
+        // server's job — plans live in their own store. We perform it here and
+        // tell the client which index changed via `step_checked`, which is the
+        // field public/index.html's orchestrate callback already listens for.
+        // Without this, the headline "DaVinci checks steps off as it watches"
+        // silently did nothing.
+        let stepChecked: number | null = null;
+        if (
+            session?.mode === "guided" &&
+            session.planId &&
+            typeof directive.step_action === "number"
+        ) {
+            try {
+                const updated = await plans.setStepDone(
+                    userId,
+                    session.planId,
+                    directive.step_action,
+                    true
+                );
+                if (updated) stepChecked = directive.step_action;
+            } catch (e) {
+                console.error("[orchestrate] step check-off failed:", e);
+            }
+        }
+
+        res.json({
+            guidance: result.message || "",
+            watch_for: directive.watch_for ?? null,
+            done: !!directive.done,
+            done_message: directive.done_message || "",
+            step_checked: stepChecked,
+        });
+    } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        console.error("Orchestrate error:", msg);
+        res.status(500).json({ error: msg });
+    }
+});
+
+// POST /api/vision/session/end -----------------------------------------------
+// FIX: this route did not exist — public/index.html's onSessionEnd has always
+// POSTed here when a guided session ends, so the call 404'd and the spoken
+// recap never happened. It takes the scene log the client accrued during the
+// session and returns ONE warm spoken-style recap line. (Persisting the session
+// as reviewable "field notes" and extracting durable memory from it are separate
+// follow-ups, intentionally not done here.)
+app.post("/api/vision/session/end", requireAuth, async (req: Request, res: Response) => {
+    try {
+        const { planId, summaries } = req.body as {
+            planId?: string | null;
+            summaries?: string[];
+        };
+        const userId = req.userId!;
+        const log = Array.isArray(summaries)
+            ? summaries.filter((s): s is string => typeof s === "string" && s.trim().length > 0)
+            : [];
+
+        // Nothing observed — nothing to recap. Honest empty result.
+        if (log.length === 0) return res.json({ recap: "" });
+
+        let plan: Plan | null = null;
+        if (planId) {
+            try {
+                plan = await plans.getPlan(userId, planId);
+            } catch {
+                plan = null;
+            }
+        }
+
+        const planLine = plan
+            ? `The user was being guided hands-on through: "${plan.goal}".`
+            : "The user just finished a guided camera session.";
+
+        const recapSystem =
+            "You are DaVinci, wrapping up a hands-on guided session you just walked " +
+            "the user through. You are given a time-ordered log of what the camera " +
+            "saw. Write ONE warm, natural spoken sentence (two at most) recapping " +
+            "what they got done — like a person who was standing beside them. No " +
+            "lists, no markdown, and never mention cameras, logs, frames, or that " +
+            "you are an assistant.";
+        const recapUser =
+            `${planLine}\n\nWhat was seen, in order:\n` +
+            `${log.map((s, i) => `${i + 1}. ${s}`).join("\n")}\n\n` +
+            "Write the recap now.";
+
+        let recap = "";
+        try {
+            recap = (
+                await llm.complete(
+                    [
+                        { role: "system", content: recapSystem },
+                        { role: "user", content: recapUser },
+                    ],
+                    { temperature: 0.5 }
+                )
+            ).trim();
+        } catch (e) {
+            console.error("[session/end] recap generation failed:", e);
+            // Non-fatal: return an empty recap rather than erroring the client.
+        }
+
+        res.json({ recap });
+    } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        console.error("Session end error:", msg);
+        res.status(500).json({ error: msg });
+    }
+});
+
+// Best-effort parse of the model's JSON, tolerant of stray fences/prose.
+function safeParse(raw: string): any {
+    const t = (s: string) => {
+        try { return JSON.parse(s); } catch { return null; }
+    };
+    let o = t(raw) || t(raw.replace(/```json|```/g, "").trim());
+    if (!o) {
+        const match = raw.match(/\{[\s\S]*\}/);
+        if (match) o = t(match[0]);
+    }
+    return o || { scene: { summary: raw.slice(0, 200) } };
+}
+
+// Guarantee every field the contract promises, so the client never breaks.
+function normalize(o: any) {
+    const s = o.scene || {};
+    const clamp = (n: unknown) =>
+        typeof n === "number" ? Math.max(0, Math.min(1, n)) : 0.5;
+    const objects = (Array.isArray(s.objects) ? s.objects : []).map(
+        (obj: any, i: number) => ({
+            id: obj.id || `obj_${String(i + 1).padStart(2, "0")}`,
+            label: obj.label || "unknown",
+            state: obj.state || "",
+            position: obj.position ?? null,
+            confidence: clamp(obj.confidence),
+        })
+    );
+    const anomalies = (Array.isArray(s.anomalies) ? s.anomalies : []).map(
+        (a: any) => ({
+            type: ["warning", "info", "danger"].includes(a.type) ? a.type : "info",
+            description: a.description || "",
+        })
+    );
+    return {
+        task_context: {
+            task: o.task_context?.task || null,
+            mode: o.task_context?.mode || null,
+        },
+        scene: {
+            summary: s.summary || "",
+            environment: s.environment || "unknown",
+            objects,
+            spatial_layout: {
+                description: s.spatial_layout?.description || "",
+                dimensions_available: !!s.spatial_layout?.dimensions_available,
+            },
+            anomalies,
+        },
+        user_flags: {
+            explicitly_mentioned: Array.isArray(o.user_flags?.explicitly_mentioned)
+                ? o.user_flags.explicitly_mentioned
+                : [],
+        },
+    };
+}
+
+// --- start ------------------------------------------------------------------
+const httpServer = createServer(app);
+attachLiveServer(httpServer, sessions, {
+    apiKey,
+    model: LIVE_MODEL,
+    voice: LIVE_VOICE,
+    systemInstruction: LIVE_SYSTEM,
+    deps: { plans, memory: memoryStore, gmailFactory, calendarFactory, recall },
+});
+httpServer.listen(PORT, () =>
+    console.log(
+        `DaVinci server up on http://localhost:${PORT} ` +
+        `[store: ${stores.backend}] [live: ${LIVE_MODEL} / ${LIVE_VOICE}]`
+    )
+);

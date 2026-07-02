@@ -1,0 +1,128 @@
+/**
+ * src/llm/gemini.ts
+ *
+ * THE ONLY FILE THAT IMPORTS @google/genai.
+ *
+ * Vendor lives here and nowhere else. If Google changes their SDK again (they
+ * just did — see the migration we went through), this is the single file that
+ * changes. Everything upstream depends on LLMProvider, not on Google.
+ *
+ * Fix 6: every model call is wrapped in withTimeout so a hung Gemini request
+ * can't tie up the orchestrator/router/synth/agents forever. Because router,
+ * agents, synthesizer, and the recap all go through this provider, wrapping it
+ * here covers nearly every LLM hang in the system in one place.
+ */
+
+import { GoogleGenAI } from "@google/genai";
+import {
+    LLMProvider,
+    LLMMessage,
+    LLMCompleteOptions,
+    LLMVisionOptions,
+    LLMImage,
+} from "./provider";
+import { withTimeout } from "../util/withTimeout";
+
+export interface GeminiConfig {
+    apiKey: string;
+    /** Defaults to a fast, cheap model good for routing decisions. */
+    model?: string;
+    /** Hard per-request ceiling in ms. Default 30s. */
+    timeoutMs?: number;
+}
+
+export class GeminiProvider implements LLMProvider {
+    readonly modelId: string;
+    private ai: GoogleGenAI;
+    private timeoutMs: number;
+
+    constructor(cfg: GeminiConfig) {
+        if (!cfg.apiKey) {
+            throw new Error("GeminiProvider: missing apiKey");
+        }
+        this.ai = new GoogleGenAI({ apiKey: cfg.apiKey });
+        this.modelId = cfg.model ?? "gemini-3.5-flash";
+        this.timeoutMs = cfg.timeoutMs ?? 30_000;
+    }
+
+    async complete(
+        messages: LLMMessage[],
+        opts?: LLMCompleteOptions
+    ): Promise<string> {
+        // Map our neutral messages onto Gemini's request shape.
+        // System messages become a systemInstruction; the rest become contents.
+        const systemParts = messages
+            .filter((m) => m.role === "system")
+            .map((m) => m.content);
+
+        const contents = messages
+            .filter((m) => m.role !== "system")
+            .map((m) => ({
+                role: m.role === "model" ? "model" : "user",
+                parts: [{ text: m.content }],
+            }));
+
+        const response = await withTimeout(
+            this.ai.models.generateContent({
+                model: this.modelId,
+                contents,
+                config: {
+                    ...(systemParts.length
+                        ? { systemInstruction: systemParts.join("\n\n") }
+                        : {}),
+                    temperature: opts?.temperature ?? 0.2,
+                    ...(opts?.json ? { responseMimeType: "application/json" } : {}),
+                    ...(opts?.maxOutputTokens
+                        ? { maxOutputTokens: opts.maxOutputTokens }
+                        : {}),
+                },
+            }),
+            this.timeoutMs,
+            `Gemini ${this.modelId}`
+        );
+
+        const text = response.text;
+        if (text === undefined || text === null) {
+            throw new Error("GeminiProvider: empty response from model");
+        }
+        return text;
+    }
+
+    async completeWithImage(
+        prompt: string,
+        image: LLMImage,
+        opts?: LLMVisionOptions
+    ): Promise<string> {
+        const response = await withTimeout(
+            this.ai.models.generateContent({
+                model: this.modelId,
+                contents: [
+                    {
+                        role: "user",
+                        parts: [
+                            { text: prompt },
+                            {
+                                inlineData: {
+                                    mimeType: image.mimeType,
+                                    data: image.base64,
+                                },
+                            },
+                        ],
+                    },
+                ],
+                config: {
+                    ...(opts?.system ? { systemInstruction: opts.system } : {}),
+                    temperature: opts?.temperature ?? 0.2,
+                    ...(opts?.json ? { responseMimeType: "application/json" } : {}),
+                },
+            }),
+            this.timeoutMs,
+            `Gemini vision ${this.modelId}`
+        );
+        const text = response.text;
+        if (text === undefined || text === null) {
+            throw new Error("GeminiProvider: empty vision response");
+        }
+        return text;
+    }
+}

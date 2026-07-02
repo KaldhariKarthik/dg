@@ -1,0 +1,14 @@
+node_modules
+dist
+.git
+.gitignore
+.env
+.env.*
+firebase-credentials.json
+data
+public/live-client.js
+public/vision-client.js
+public/*.js.map
+npm-debug.log
+.DS_Store
+*.md
